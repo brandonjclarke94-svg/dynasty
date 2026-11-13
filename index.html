@@ -327,6 +327,7 @@ function seasonPts(a, pos, c, model){
   let p = s.py/c.pyd + s.ptd*c.ptd + s.pint*c.int + s.ry*0.1 + s.rtd*6 + s.recy*0.1 + s.rectd*6 + s.fl*c.fl
         + s.rec*(c.ppr + (pos==='TE' ? c.tep - (model ? TEP0 : 0) : 0));
   if(c.fd) p += (s.fdR+s.fdU)*c.fd;
+  if(c.fdRec||c.fdRush||c.fdPass) p += s.fdR*(c.fdRec||0) + s.fdU*(c.fdRush||0) + s.fdP*(c.fdPass||0);   // first downs scored by type (e.g. UFFA: catch 1, run 0.5, pass 0.2)
   return {g:s.g, pts:p, ppg:p/s.g};
 }
 function nPdf(z){ return Math.exp(-z*z/2)/Math.sqrt(2*Math.PI); }
@@ -385,6 +386,7 @@ function replacement(cands, c){
   const L = {}; POS.forEach(q=>L[q]=cands.filter(x=>x.pos===q).map(x=>x.ppg).sort((a,b)=>b-a));
   const n = {QB:c.qb*c.teams, RB:c.rb*c.teams, WR:c.wr*c.teams, TE:c.te*c.teams};
   const take = elig => { let best=null; elig.forEach(q=>{ const v=L[q][n[q]]; if(v!=null && (best==null || v>L[best][n[best]])) best=q; }); if(best) n[best]++; };
+  for(let i=0;i<(c.wt||0)*c.teams;i++) take(['WR','TE']);   // WR/TE-only flex, filled before the open flex
   for(let i=0;i<c.flex*c.teams;i++) take(['RB','WR','TE']);
   for(let i=0;i<c.sf*c.teams;i++) take(['QB','RB','WR','TE']);
   const R = {}, N = {};
