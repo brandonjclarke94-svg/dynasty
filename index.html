@@ -1,0 +1,1063 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Dynasty fantasy football rankings built from real game logs: values for any league format, picks, trade calculator."><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Dynasty Value Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: broadcast-booth dark. Sticky top bar (desktop tabs) + bottom tab bar on phones; one content column up to 1180px;
+   rankings as a dense data table, profile as a right-hand panel (bottom sheet on phones). One accent (cobalt), gold reserved
+   for the elite tier, position colour only as a thin marker. Committed single dark look. */
+:root{
+  --bg:#0A0C0F; --bg2:#0E1115; --surface:#13161B; --raised:#191D23; --hover:#1E232A; --line:#232831; --line2:#2E3440;
+  --ink:#E9ECF1; --ink2:#C3C9D2; --muted:#848D9A; --faint:#5C6470;
+  --accent:#5B8CFF; --accent-ink:#06122E; --accent-soft:rgba(91,140,255,.14);
+  --gold:#D8B45A; --gold-soft:rgba(216,180,90,.13);
+  --qb:#E26A80; --rb:#3DBB9F; --wr:#5E9CEB; --te:#E2A04E; --pk:#9AA3B0;
+  --good:#43C487; --good-bg:rgba(67,196,135,.13); --warn:#E8B04A; --warn-bg:rgba(232,176,74,.13); --bad:#F06B6B; --bad-bg:rgba(240,107,107,.13);
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 10px 30px rgba(0,0,0,.35);
+  --r:12px; --ease:cubic-bezier(.2,.7,.2,1);
+  --f-display:'Big Shoulders Display','Oswald','Arial Narrow',system-ui,sans-serif;
+  --f-body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(1200px 400px at 70% -100px, rgba(91,140,255,.07), transparent 70%)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg2)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.grow{flex:1;min-width:0}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- top bar ---------- */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(14,17,21,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:14px;padding-block:10px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mark{width:30px;height:30px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,var(--accent),#2E58D6);display:grid;place-items:center;font-family:var(--f-display);font-weight:900;font-size:16px;color:#fff;letter-spacing:.02em}
+.brand b{display:block;font-family:var(--f-display);font-weight:800;font-size:20px;letter-spacing:.03em;text-transform:uppercase;line-height:1}
+.brand small{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dtabs{display:none;gap:2px;margin-left:12px}
+.dtabs button{border:0;background:none;padding:8px 12px;border-radius:8px;color:var(--muted);font-weight:600;font-size:13.5px;transition:color .15s,background .15s}
+.dtabs button:hover{color:var(--ink);background:var(--hover)}
+.dtabs button[aria-current="page"]{color:var(--ink);background:var(--raised);box-shadow:inset 0 -2px 0 var(--accent)}
+@media (min-width:900px){.dtabs{display:flex}}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:999px;background:var(--raised);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px rgba(67,196,135,.15)}
+main{padding-block:18px 110px;display:grid;gap:16px}
+@media (min-width:900px){main{padding-bottom:48px}}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(14,17,21,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs .wrap{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding-block:6px}
+nav.tabs button{border:0;background:none;padding:6px 2px;border-radius:10px;color:var(--muted);display:grid;justify-items:center;gap:2px;font-size:10.5px;font-weight:600;letter-spacing:.02em}
+nav.tabs button svg{width:20px;height:20px}
+nav.tabs button[aria-current="page"]{color:var(--ink)}
+nav.tabs button[aria-current="page"] svg{color:var(--accent)}
+@media (min-width:900px){nav.tabs{display:none}}
+
+/* ---------- surfaces & type ---------- */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);min-width:0}
+.panel h2,.h2{font-family:var(--f-display);font-weight:800;font-size:20px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 6px;text-wrap:balance;line-height:1.05}
+.panel h3{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin:16px 0 6px}
+.eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.sub{color:var(--muted);font-size:13px;margin:0}
+p{margin:0 0 8px;max-width:72ch}
+.note{font-size:12.5px;color:var(--muted)}
+.err{color:var(--bad);font-size:12.5px}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
+.kv:last-of-type{border-bottom:0}
+
+/* ---------- controls ---------- */
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:none;padding:6px 10px;border-radius:7px;font-weight:600;font-size:12.5px;color:var(--muted);transition:background .15s var(--ease),color .15s}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--raised);color:var(--ink);box-shadow:0 0 0 1px var(--line2),0 1px 2px rgba(0,0,0,.4)}
+.search,select.sel{border:1px solid var(--line);background:var(--bg2);border-radius:10px;padding:8px 12px;color:var(--ink);min-width:0;transition:border-color .15s}
+.search{flex:1 1 220px;min-width:0}
+.search::placeholder{color:var(--faint)}
+.search:focus,select.sel:focus{border-color:var(--accent);outline:none}
+select.sel{appearance:none;-webkit-appearance:none;padding-right:28px;font-size:12.5px;font-weight:600;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat}
+.btn{border:1px solid var(--line2);background:var(--raised);border-radius:10px;padding:8px 13px;font-weight:600;font-size:13px;color:var(--ink);transition:background .15s,border-color .15s,transform .1s}
+.btn:hover{background:var(--hover)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.45;cursor:default;transform:none}
+.btn.on{background:var(--gold-soft);border-color:var(--gold);color:var(--gold)}
+.iconbtn{width:36px;height:36px;padding:0;display:grid;place-items:center}
+
+/* ---------- tags ---------- */
+.pos{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-family:var(--f-mono);font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--ink2)}
+.pos::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--pk)}
+.pos.QB::before{background:var(--qb)} .pos.RB::before{background:var(--rb)} .pos.WR::before{background:var(--wr)} .pos.TE::before{background:var(--te)}
+.tm{display:inline-block;font-family:var(--f-mono);font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:5px;letter-spacing:.03em;line-height:1.55}
+.tm.fa{background:var(--raised);color:var(--muted);border:1px solid var(--line)}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;letter-spacing:.04em;text-transform:uppercase;line-height:1.4;white-space:nowrap}
+.tag.inj{background:var(--bad-bg);color:var(--bad)}
+.tag.adj{background:var(--warn-bg);color:var(--warn)}
+.tag.rook,.tag.new{background:var(--accent-soft);color:var(--accent)}
+.tag.up{background:var(--good-bg);color:var(--good)}
+.star{color:var(--gold)}
+.ecr{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.ecr b{font-weight:600}
+.up{color:var(--good)} .dn{color:var(--bad)}
+.ecr b.up{color:var(--good)} .ecr b.dn{color:var(--bad)}
+
+/* ---------- rankings table ---------- */
+.toolbar{position:relative;z-index:10;background:rgba(10,12,15,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  margin-inline:-16px;padding:10px 16px;display:grid;gap:8px;border-bottom:1px solid var(--line)}
+.board{display:grid;gap:14px}
+.tbl{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.thead,.row{display:grid;grid-template-columns:34px minmax(0,1fr) 78px;gap:10px;align-items:center}
+.thead{display:none;padding:9px 14px;background:var(--bg2);border-bottom:1px solid var(--line);font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.thead button{border:0;background:none;padding:0;font:inherit;letter-spacing:inherit;color:inherit;text-transform:inherit;display:inline-flex;gap:4px;align-items:center}
+.thead button:hover{color:var(--ink)} .thead button.on{color:var(--ink)}
+.thead .r{justify-content:flex-end;text-align:right}
+.row{width:100%;text-align:left;border:0;background:transparent;padding:10px 14px;border-bottom:1px solid var(--line);position:relative;transition:background .12s}
+.row:last-child{border-bottom:0}
+button.row:hover{background:var(--hover)}
+div.row{cursor:default}
+.row::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:2px;border-radius:2px;background:transparent}
+.row.elite::before{background:var(--gold)}
+.row .rk{font-family:var(--f-display);font-weight:800;font-size:22px;line-height:1;text-align:right;color:var(--ink2)}
+.row.elite .rk{color:var(--gold)}
+.row .nm{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+.row .meta{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px;margin-top:3px;flex-wrap:wrap}
+.row .val{text-align:right}
+.row .val b{font-family:var(--f-mono);font-size:15px;font-weight:600}
+.row .val .d{display:block;font-family:var(--f-mono);font-size:11px;margin-top:1px}
+.c{display:none;font-family:var(--f-mono);font-size:12.5px;color:var(--ink2);text-align:right}
+.c.up{color:var(--good)} .c.dn{color:var(--bad)}
+.bar{height:4px;border-radius:2px;background:var(--line);margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px;background:var(--pk);transform-origin:left;animation:grow .5s var(--ease)}
+.bar i.QB{background:var(--qb)} .bar i.RB{background:var(--rb)} .bar i.WR{background:var(--wr)} .bar i.TE{background:var(--te)} .bar i.PK{background:var(--pk)}
+@keyframes grow{from{transform:scaleX(0)}}
+@media (min-width:760px){
+  .toolbar{position:sticky;top:calc(env(safe-area-inset-top,0px) + 57px)}
+  .thead{display:grid}
+  .thead,.tbl .row{grid-template-columns:44px minmax(0,1fr) 54px 52px 58px 170px 64px 74px}
+  .c{display:block}
+  .row .val{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
+  .row .val .bar{margin-top:0}
+  .row .val .d{display:none}
+  .row .meta .mob{display:none}
+}
+.tier{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--line);font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.tier b{color:var(--ink2);font-weight:700}
+.tier.gold b{color:var(--gold)}
+.tier::after{content:"";flex:1;height:1px;background:var(--line)}
+.rowgrp{display:contents}
+.empty{text-align:center;padding:40px 16px;color:var(--muted)}
+.empty b{display:block;font-family:var(--f-display);font-size:24px;color:var(--ink);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.more{text-align:center;padding:12px}
+
+/* ---------- dashboard ---------- */
+.dash{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:900px){.dash{grid-template-columns:repeat(12,minmax(0,1fr))}.s4{grid-column:span 4}.s5{grid-column:span 5}.s6{grid-column:span 6}.s7{grid-column:span 7}.s8{grid-column:span 8}.s12{grid-column:span 12}}
+.hero-strip{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.hero-strip h1{font-family:var(--f-display);font-weight:900;font-size:clamp(30px,6vw,46px);letter-spacing:.02em;text-transform:uppercase;line-height:.95;margin:4px 0 0}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:700px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:grid;gap:4px;min-width:0;box-shadow:var(--shadow)}
+.kpi b{font-family:var(--f-mono);font-size:24px;font-weight:600;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi em{font-style:normal;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini{display:grid}
+.mini button{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:center;border:0;background:none;text-align:left;padding:8px 2px;border-bottom:1px solid var(--line);transition:background .12s}
+.mini button:last-child{border-bottom:0}
+.mini button:hover{background:var(--hover)}
+.mini .n{font-family:var(--f-display);font-weight:800;font-size:16px;color:var(--muted);text-align:right}
+.mini .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .nm small{display:block;font-weight:400;font-size:11.5px;color:var(--muted)}
+.mini .v{font-family:var(--f-mono);font-weight:600;font-size:13px;text-align:right}
+.stack{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--line);margin:10px 0 12px}
+.stack i{display:block;height:100%}
+.legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;font-size:12.5px}
+.legend div{display:flex;justify-content:space-between;gap:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px;color:var(--ink2)}
+.legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.ladder{display:grid;gap:6px;margin-top:6px}
+.ladder div{display:grid;grid-template-columns:52px minmax(0,1fr) 104px;gap:10px;align-items:center;font-size:12px}
+.ladder .lb{color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:10.5px}
+.ladder .tr{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.ladder .tr i{display:block;height:100%;background:var(--accent);border-radius:4px;opacity:.85}
+.ladder .tr i.g{background:var(--gold)}
+.ladder .rg{font-family:var(--f-mono);color:var(--ink2);text-align:right;white-space:nowrap}
+.twocol{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:560px){.twocol{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- profile panel ---------- */
+.scrim{position:fixed;inset:0;z-index:40;background:rgba(3,4,6,.6);display:flex;align-items:flex-end;justify-content:center;animation:fade .2s ease}
+.sheet{background:var(--bg2);border:1px solid var(--line);width:100%;max-width:640px;max-height:94%;overflow:auto;border-radius:18px 18px 0 0;
+  padding:18px max(16px,env(safe-area-inset-left,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));animation:up .28s var(--ease)}
+@media (min-width:900px){.scrim{justify-content:flex-end;align-items:stretch}.sheet{max-width:560px;max-height:none;height:100%;border-radius:0;border-width:0 0 0 1px;animation:left .28s var(--ease);padding-top:22px}}
+@keyframes fade{from{opacity:0}} @keyframes up{from{transform:translateY(40px);opacity:0}} @keyframes left{from{transform:translateX(40px);opacity:0}}
+.sheet h2{font-family:var(--f-display);font-weight:900;font-size:34px;letter-spacing:.02em;text-transform:uppercase;margin:0;line-height:.95;text-wrap:balance}
+.sec{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.sec>.eyebrow{display:block;margin-bottom:10px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.tiles>div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:grid;gap:2px;min-width:0}
+.tiles span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.tiles b{font-family:var(--f-mono);font-size:19px;font-weight:600;line-height:1.2}
+.tiles em{font-style:normal;font-size:11.5px;color:var(--muted)}
+.sheettiles{margin:14px 0 6px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.sheettiles .hero{grid-column:1/-1;background:linear-gradient(135deg,rgba(91,140,255,.16),rgba(91,140,255,.04));border-color:rgba(91,140,255,.35)}
+.sheettiles .hero b{font-size:40px;color:var(--ink)}
+@media (min-width:520px){.sheettiles{grid-template-columns:1.4fr repeat(4,minmax(0,1fr))}.sheettiles .hero{grid-column:auto}}
+.minesum .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:520px){.minesum .tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.charts{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:520px){.charts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.chart svg{display:block;width:100%;height:auto;max-height:160px;overflow:visible}
+.chart text{font-family:var(--f-mono);font-size:10px;fill:var(--muted)}
+.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.step:first-child{border-top:0}
+.step .n{font-family:var(--f-display);font-weight:800;font-size:18px;color:var(--accent);line-height:1.2}
+.step .t{font-weight:600;margin-bottom:4px}
+.eq{font-family:var(--f-mono);font-size:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;overflow-x:auto;white-space:nowrap;color:var(--ink2)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 6px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+td{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink2)}
+.tscroll{overflow-x:auto}
+.yrs{display:flex;align-items:flex-end;gap:3px;height:76px;margin-top:8px}
+.yrs div{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end}
+.yrs i{display:block;width:100%;border-radius:3px 3px 0 0;background:var(--accent);min-height:1px}
+.yrs span{font-family:var(--f-mono);font-size:9.5px;color:var(--muted)}
+
+/* ---------- forms, trade, misc ---------- */
+.fgrid{display:grid;gap:14px}
+.fld{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:center}
+@media (min-width:640px){.fld{grid-template-columns:minmax(0,1fr) auto}}
+.fld label{font-weight:600;font-size:13.5px}
+.fld .hint{display:block;font-weight:400;color:var(--muted);font-size:12px;margin-top:2px}
+.presets{display:flex;gap:6px;flex-wrap:wrap}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.tgrid{grid-template-columns:1fr}}
+.side{display:grid;gap:8px;align-content:start}
+.pick{display:flex;justify-content:space-between;gap:8px;align-items:center;background:var(--raised);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.pick button{border:0;background:none;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px}
+.sugg{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.sugg button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;border-bottom:1px solid var(--line);background:none;padding:8px 10px;text-align:left}
+.sugg button:hover{background:var(--hover)}
+.sugg button:last-child{border-bottom:0}
+.verdict{border-radius:var(--r);padding:12px 14px;font-weight:600;border:1px solid}
+.verdict.fair{background:var(--good-bg);color:var(--good);border-color:rgba(67,196,135,.3)}
+.verdict.off{background:var(--warn-bg);color:var(--warn);border-color:rgba(232,176,74,.3)}
+.prog{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:10px}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .3s}
+</style>
+
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script>
+/* ===== Dynasty Value Board engine (pure functions, no DOM) ===== */
+const POS = ['QB','RB','WR','TE'];
+// one season of raw stats, stored as an array to keep the database small
+const F = ['g','att','py','ptd','pint','car','ry','rtd','tg','rec','recy','rectd','fl','fdP','fdR','fdU'];
+const DEF = { teams:12, qb:1, rb:2, wr:3, te:1, flex:1, sf:1,
+  ppr:1, tep:0.5, ptd:4, pyd:25, int:-2, fl:-2, fd:0, upside:1, dcw:1, star:1.15, mode:'neutral', league:'dynasty', athw:1 };
+const PRESETS = {
+  'Superflex PPR':      {qb:1, sf:1, ppr:1,   tep:0},
+  'Superflex TE+':      {qb:1, sf:1, ppr:1,   tep:0.5},
+  '1QB PPR':            {qb:1, sf:0, ppr:1,   tep:0},
+  '1QB Half':           {qb:1, sf:0, ppr:0.5, tep:0},
+  '2QB PPR':            {qb:2, sf:0, ppr:1,   tep:0} };
+// formula shape, fitted position by position. Rp = the replacement ppg the shape was fitted at.
+const PV = {   // refit Nov 12 2026 on three seasons of nflverse stats, against a 50/50 blend of PlayerProfiler and FantasyPros ECR (TE 75/25),
+               // inside football guard rails: QBs fade ~35-40, RBs ~27-31, WRs/TEs ~31-35; at most a 20% yearly discount; QBs' records are trusted most
+  QB:{k:24.07, mid:37.50, d:0.800, shr:20.0, a1:0.86, a3:0.37, inj:0.24, lam:0.015, dpA:44.52, sig:1.118, ys:0.00, Rp:12.70, tb:0.894, rook:0.214},
+  RB:{k:14.27, mid:31.00, d:0.800, shr:33.1, a1:2.54, a3:0.59, inj:0.33, lam:0.613, dpA:20.45, sig:2.510, ys:0.01, Rp:7.19, tb:0.500, rook:1.200},
+  WR:{k:12.49, mid:35.00, d:0.826, shr:30.0, a1:2.65, a3:0.76, inj:0.07, lam:0.247, dpA:23.85, sig:2.009, ys:0.24, Rp:8.12, tb:0.549, rook:0.477},
+  TE:{k:10.58, mid:34.44, d:0.945, shr:30.0, a1:3.00, a3:0.69, inj:0.3, lam:0.421, dpA:19.94, sig:1.311, ys:0.00, Rp:7.38, tb:0.728, rook:0.129} };
+const ROOK = {QB:0.25, RB:0.3, WR:0.6, TE:0.5};   // how far above replacement a first-overall pick starts, by position
+const YF = {QB:true, RB:true, WR:true, TE:true};
+// Team direction. Each future season of a player's career is weighted by how much it matters to you:
+// win now leans on this season and next; rebuild cares little about this season and full value two-plus years out.
+// It also tilts how much upside is worth and how far away future picks feel.
+const MODES = {
+  win:     {label:'Win now',  yr:j=> j===0 ? 1.6 : j===1 ? 1.2 : 0.85*Math.pow(0.8, j-2), up:0.85, later:[1, 0.75, 0.6]},
+  neutral: {label:'Neutral',  yr:j=> 1,                                                    up:1,    later:[1, 0.9, 0.82]},
+  rebuild: {label:'Rebuild',  yr:j=> j===0 ? 0.35 : j===1 ? 0.9 : 1.15,                     up:1.2,  later:[1, 0.97, 0.94]} };
+const TGT = {base:0.8};
+// Big changes. A player who changed teams since his last games produced those numbers in another offense, so his record is
+// trusted 25% less and his range of outcomes is 15% wider. An outlook note (owner or the twice-weekly news check) moves his
+// expected scoring: much worse -18%, worse -9%, better +9%, much better +18%. Dynasty applies 60% of it (situations change again).
+const OUTLOOK = {'-2':0.82, '-1':0.91, '1':1.09, '2':1.18};
+const MOVE_TRUST = 0.75, MOVE_SPREAD = 1.15;
+function outMult(o, redraft){ if(!o || !o.f || !OUTLOOK[o.f]) return 1; const m = OUTLOOK[o.f]; return redraft ? m : 1 + 0.6*(m-1); }
+// Injuries short of IR, from the latest injury report: expected games he'll still miss.
+// Out: 1 game plus 0.75 for every straight week he's already been out (a long absence tends to run on), up to 6; Doubtful 0.8;
+// Questionable 0.25; missed practice this week (injury, not rest) 0.3; concussions add half a game.
+// An owner's note from the news ("out 4-6 weeks") outranks the report: games still to miss = the games he set, minus one per week since.
+function ovrLeft(o, now){ if(!o || !o.games) return 0; const wks = Math.floor(Math.max(0, now - o.at)/(7*864e5)); return Math.max(0, o.games - wks); }
+function expMiss(rep){ if(!rep) return 0; let m = rep.s==='Out' ? Math.min(6, 1 + 0.75*(rep.out||1)) : rep.s==='Doubtful' ? 0.8 : rep.s==='Questionable' ? 0.25 : rep.s==='DNP' ? 0.3 : 0;
+  if(m && /concuss/i.test(rep.what||'')) m += 0.5; return m; }
+// Athleticism (combine composite, in SDs) nudges draft slot, and only where it has predicted fantasy output beyond draft slot.
+// Tested on 2017-23 draft classes (points in years 2-3): TEs clearly (t 2.4), RBs and QBs a little (t ~1, so shrunk hard), WRs not at all.
+// One SD of athleticism counts like being drafted this many times earlier (exp(beta)): TE ~1.4x, RB ~1.05x, QB ~1.03x, WR 1x.
+const ATH = {QB:0.03, RB:0.05, WR:0, TE:0.34};   // shrunk hard toward zero (a skeptical prior), so it only nudges
+const BENCH = 0.2;
+const ROOKSD = {QB:3, RB:1, WR:1, TE:1};   // QBs with no snaps carry a much wider range of outcomes than the fitted QB spread
+const GF = 2;   // seasons of games until draft slot stops counting
+const TEP0 = 0.5;   // the fitted values already price in a +0.5 TE premium
+const DEPTH = 1.15;   // replacement sits a little below the last starter (bench depth)
+// the format the shape was fitted in: 12 teams, superflex, full PPR, +0.5 TE premium
+const REF = {teams:12, qb:1, rb:2, wr:3, te:1, flex:1, sf:1, ppr:1, tep:0.5, ptd:4, pyd:25, int:-2, fl:-2, fd:0};
+
+function normName(s){ return String(s||'').toLowerCase().replace(/[.'’]/g,'').replace(/\b(jr|sr|ii|iii|iv|v)\b/g,'').replace(/[^a-z0-9]/g,''); }
+function unpack(a){ if(!a) return null; const o={}; F.forEach((f,i)=>o[f]=+a[i]||0); return o; }
+function seasonPts(a, pos, c, model){
+  const s = unpack(a); if(!s || !s.g) return null;
+  let p = s.py/c.pyd + s.ptd*c.ptd + s.pint*c.int + s.ry*0.1 + s.rtd*6 + s.recy*0.1 + s.rectd*6 + s.fl*c.fl
+        + s.rec*(c.ppr + (pos==='TE' ? c.tep - (model ? TEP0 : 0) : 0));
+  if(c.fd) p += (s.fdR+s.fdU)*c.fd;
+  return {g:s.g, pts:p, ppg:p/s.g};
+}
+function nPdf(z){ return Math.exp(-z*z/2)/Math.sqrt(2*Math.PI); }
+function nCdf(z){ const t=1/(1+0.2316419*Math.abs(z)); const d=0.3989423*Math.exp(-z*z/2); const pr=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274)))); return z>0?1-pr:pr; }
+
+// weighted production: this season's games count a1x, last season 1x, two seasons ago a3x
+function weighted(lines, Q){
+  const c=PV[Q]; let num=0, den=0, gms=0;
+  [[lines[0],c.a1],[lines[1],1],[lines[2],c.a3]].forEach(([l,w])=>{ if(l&&l.g){ num+=w*l.pts; den+=w*l.g; gms+=l.g; } });
+  return {num, den, gms, ppg: den>0 ? num/den : null};
+}
+// Lifetime value. Returns the steps so the page can show its work.
+function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om){
+  const md = MODES[mode] || MODES.neutral;
+  dcw = dcw==null ? 1 : dcw;
+  const c = PV[Q], sc = R/c.Rp, st = {R, sc};
+  let ppg;
+  // thin samples are pulled toward what a player like this usually becomes: a first-round pick near or above replacement,
+  // a late-round or undrafted player below it. A long track record outweighs this.
+  const tdp = dp ? Math.max(0, 1 - Math.log(dp)/Math.log(257)) : 0;
+  const rook = c.rook!=null ? c.rook : ROOK[Q];
+  const youth = Math.max(0, Math.min(1, (26 - age)/3));     // draft slot stops mattering by about 26
+  const target = R*Math.min(1.1, (c.tb!=null?c.tb:TGT.base) + rook*dcw*tdp*youth);
+  st.target = target;
+  if(w.den>0) ppg = (w.num + c.shr*target)/(w.den + c.shr);
+  else { // no NFL games yet: expectation from draft slot alone (pick 1 well above replacement, day-3 picks below it)
+    const t = dp ? Math.max(0, 1 - Math.log(dp)/Math.log(257)) : 0;
+    ppg = R*Math.min(1.1, (c.tb!=null?c.tb:TGT.base) + (c.rook!=null?c.rook:ROOK[Q])*dcw*t); st.rookie = true;
+    // not playing is information: deep into a season with no snaps means he's behind someone. Full markdown by week 8.
+    if(bench){ st.bench = BENCH*bench; ppg *= 1 - st.bench; } }
+  st.shrunk = ppg;
+  if(w.den>0 && dp && age < 25.5 && c.lam >= 0.02){   // (QBs: the fit gave this ~no weight, so it's skipped)
+    const prior = Math.max(0, (c.dpA - 3.3*Math.log(dp))*sc);
+    // pedigree fades with age and with games played: after about two full seasons, production does the talking
+    const l = Math.min(0.9, c.lam*dcw) * Math.min(1, (25.5-age)/3) * Math.max(0, 1 - w.gms/(GF*17));
+    ppg = (1-l)*ppg + l*prior; st.prior = prior; st.lam = l;
+  }
+  if(om && om!==1){ st.preOut = ppg; ppg *= om; st.om = om; }   // situation change (new team, role, QB): expected scoring moved up or down
+  st.ppg = ppg;
+  // youth upside is earned by draft capital: a day-3 rookie doesn't carry a first-rounder's range of outcomes
+  const yf = YF[Q] ? (dp ? Math.max(0.1, 1 - Math.log(dp)/Math.log(257)) : 0.3) : 1;
+  let s=0, sm=0, surv=1; const yrs=[];
+  for(let j=0;j<25;j++){
+    const t = age+j; if(j>0) surv *= 1 - 1/(1+Math.exp(-(t-c.mid))); if(surv<0.01) break;
+    const sd = (st.rookie ? 1 + (ROOKSD[Q]-1)*tdp : 1)*c.sig*upside*md.up*sc*(1 + c.ys*yf*Math.max(0,25-t)/3)*(1+0.15*j), z = (ppg-R)/sd;
+    const yv = Math.pow(c.d,j)*surv*(sd*nPdf(z) + (ppg-R)*nCdf(z));
+    s += yv; sm += md.yr(j)*yv; yrs.push({age:t, surv, yv:yv*c.k});
+  }
+  st.yrs = yrs; st.inj = injured ? c.inj : 0;
+  st.value = c.k*s*(injured ? 1-c.inj : 1);
+  st.tilt = s>0 ? sm/s : 1;   // how much of his value lands in the seasons your team direction cares about
+  return st;
+}
+// who starts: dedicated slots first, then flex (RB/WR/TE), then superflex (any) go to the best remaining player
+function replacement(cands, c){
+  const L = {}; POS.forEach(q=>L[q]=cands.filter(x=>x.pos===q).map(x=>x.ppg).sort((a,b)=>b-a));
+  const n = {QB:c.qb*c.teams, RB:c.rb*c.teams, WR:c.wr*c.teams, TE:c.te*c.teams};
+  const take = elig => { let best=null; elig.forEach(q=>{ const v=L[q][n[q]]; if(v!=null && (best==null || v>L[best][n[best]])) best=q; }); if(best) n[best]++; };
+  for(let i=0;i<c.flex*c.teams;i++) take(['RB','WR','TE']);
+  for(let i=0;i<c.sf*c.teams;i++) take(['QB','RB','WR','TE']);
+  const R = {}, N = {};
+  POS.forEach(q=>{ const idx = Math.round(n[q]*DEPTH); N[q]=n[q]; const arr=L[q]; R[q] = arr.length ? arr[Math.min(arr.length-1, idx)] : PV[q].Rp; });
+  return {R, N};
+}
+// players: [{k,n,pos,team,age,ad,dp,inj,rk,s:{season:[...]}}]; adj: {k: pct}
+function rankAll(players, cfgIn, now, adj){
+  const c = {...DEF, ...cfgIn}; adj = adj||{};
+  let S = 0; players.forEach(p=>Object.keys(p.s||{}).forEach(y=>{ if(p.s[y] && p.s[y][0]>0) S=Math.max(S,+y); }));
+  const rows = players.filter(p=>POS.includes(p.pos)).map(p=>{
+    const lines = [S, S-1, S-2].map(y=>seasonPts(p.s&&p.s[y], p.pos, c));          // what he scored, your scoring
+    const w = weighted([S, S-1, S-2].map(y=>seasonPts(p.s&&p.s[y], p.pos, c, true)), p.pos);   // what the formula reads
+    const age = p.age!=null ? p.age + (now - (p.ad||now))/(365.25*864e5) : null;
+    return {...p, p, lines, w, ageNow:age};
+  });
+  // replacement level: the fitted level, moved by how much deeper or shallower your lineup is than the fitted format
+  const lr = cfg => replacement(rows.map(r=>({pos:r.pos, w:weighted([0,1,2].map(i=>seasonPts(r.p.s&&r.p.s[[S,S-1,S-2][i]], r.pos, cfg, true)), r.pos)})).filter(x=>x.w.gms>=4).map(x=>({pos:x.pos, ppg:x.w.ppg})), cfg);
+  const mine = lr(c), ref = lr({...DEF, ...REF});
+  const R = {}, N = mine.N; POS.forEach(q=>{ R[q] = PV[q].Rp * (mine.R[q] / (ref.R[q]||mine.R[q]||1)); });
+  let out = [];
+  if(c.league==='redraft'){
+    let gS0 = 0; rows.forEach(r=>{ const l=r.lines[0]; if(l && l.g>gS0) gS0=l.g; });
+    const rd = redraftAll(rows.map(r=>({...r, adj:adj[r.k]||0})), c, S, gS0, now);
+    out = rd.out.filter(r=>r.v>0 || (r.lines[0] && r.lines[0].g>=3));
+    out.forEach(r=>r.adj = +adj[r.k]||0);
+    return finishBoard(out, c, cfgIn, rd.R, rd.N, S, now, {redraft:true, left:rd.left});
+  }
+  // how far into the latest season we are (most games anyone has played), for the no-snaps markdown
+  let gS = 0; rows.forEach(r=>{ const l=r.lines[0]; if(l && l.g>gS) gS=l.g; });
+  const bench = Math.min(1, gS/8);
+  rows.forEach(r=>{
+    if(r.ageNow==null) return;
+    if(!r.w.den && !r.dp) return;                     // no games and no draft capital: nothing to value
+    const az = r.ath!=null ? Math.max(-2, Math.min(2, r.ath)) : 0;
+    const dpE = r.dp ? Math.max(1, r.dp*Math.exp(-ATH[r.pos]*az*(c.athw!=null?c.athw:1))) : r.dp;
+    const wv = r.moved ? {...r.w, num:r.w.num*MOVE_TRUST, den:r.w.den*MOVE_TRUST} : r.w;
+    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(r.moved?MOVE_SPREAD:1), c.dcw, c.mode, bench, outMult(r.out, false));
+    if(r.moved) st.moved = r.moved; if(r.out) st.out = r.out;
+    st.dpE = dpE;
+    const ov = ovrLeft(r.ovr, now), miss = r.inj && !ov ? 0 : Math.max(ov, r.inj ? 0 : expMiss(r.rep));
+    if(ov) st.ovr = r.ovr;
+ // IR already carries its own, larger markdown, so short-injury math only applies off IR
+    if(miss && !r.inj){ st.miss = miss; st.missF = 1 - PV[r.pos].inj*Math.min(1, miss/17); st.value *= st.missF; }   // games lost out of a season, at the position's injury cost
+    const a = +adj[r.k]||0;
+    out.push({...r, st, base:st.value, adj:a, v: st.value*(1+a/100)});
+  });
+  // team direction: within each position, players whose value comes sooner (win now) or later (rebuild) than the
+  // position's typical top-40 player move up; the position's overall level stays put, so positions stay comparable
+  if(c.mode && c.mode!=='neutral') POS.forEach(q=>{
+    const xs = out.filter(r=>r.pos===q).sort((a,b)=>b.base-a.base), top = xs.slice(0,40);
+    const avg = top.reduce((a,r)=>a+r.st.tilt,0)/Math.max(1,top.length);
+    xs.forEach(r=>{ const f = avg>0 ? r.st.tilt/avg : 1; r.modeF = f; r.base *= f; r.v = r.base*(1+(r.adj||0)/100); });
+  });
+  return finishBoard(out, c, cfgIn, R, N, S, now, {});
+}
+function finishBoard(out, c, cfgIn, R, N, S, now, extra){
+  // Value first. Players whose values round to the same number (most often the many 0s below replacement) are ordered by how close
+  // their expected scoring is to replacement at their position, then by this season's scoring, then by expert rank.
+  const gapR = r => r.st && r.st.redraft ? r.st.raw/10 : r.st && r.st.ppg!=null && r.st.R ? (r.st.ppg - r.st.R)/r.st.R : -9;   // redraft: how far below replacement over the games he has left
+  const cur = r => r.lines && r.lines[0] ? r.lines[0].ppg : -1;
+  const er = r => { const x = r.ecr && (r.ecr[0]||r.ecr[1]||r.ecr[2]); return x || 9999; };
+  out.sort((a,b)=> (Math.round(b.v*10)-Math.round(a.v*10)) || (gapR(b)-gapR(a)) || (cur(b)-cur(a)) || (er(a)-er(b)) || String(a.n).localeCompare(String(b.n)));
+  const pr = {}; out.forEach((r,i)=>{ r.rank=i+1; pr[r.pos]=(pr[r.pos]||0)+1; r.prank=pr[r.pos]; });
+  tierCut(out.map(r=>r.v), 240).forEach((t,i)=>out[i].tier=t);
+  POS.forEach(q=>{ const xs = out.filter(r=>r.pos===q); tierCut(xs.map(r=>r.v), 80).forEach((t,i)=>xs[i].ptier=t); });
+  // expert consensus (FantasyPros, for comparison only): dynasty superflex / dynasty 1QB / redraft (1QB only)
+  const em = extra.redraft ? ((c.sf || c.qb>=2) ? -1 : 2) : ((c.sf || c.qb>=2) ? 0 : 1);
+  out.forEach(r=>{ r.ecrRank = em>=0 && r.ecr && r.ecr[em] ? r.ecr[em] : null; r.ecrPos = null; });
+  POS.forEach(q=>{ out.filter(r=>r.pos===q && r.ecrRank).sort((a,b)=>a.ecrRank-b.ecrRank).forEach((r,i)=>r.ecrPos=i+1); });
+  return {rows:out, picks: extra.redraft ? [] : pickBoard(out, c, S, now), R, N, season:S, cfg:c, ecrAt:cfgIn.__ecrAt||null, redraft:!!extra.redraft, left:extra.left};
+}
+// ---- Redraft: rest-of-season points above replacement ----
+// This season is the evidence; last season counts a little (up to 6 games at half weight); four phantom games at replacement
+// keep small samples honest. Replacement comes straight from your lineup. Value = (expected PPG - replacement) x games left.
+function redraftAll(rows, c, S, gS, nowR){
+  const cands = rows.filter(r=>r.lines[0] && r.lines[0].g>=3).map(r=>({pos:r.pos, ppg:r.lines[0].ppg}));
+  const {R, N} = replacement(cands, c);
+  const left = c.__left!=null ? c.__left : Math.max(0, 17 - gS), out = [];   // __left: compare past and present over the same games
+  rows.forEach(r=>{
+    const l1 = r.lines[0], l2 = r.lines[1];
+    if(!l1 && !(l2 && r.ageNow!=null)) return;
+    const g1 = l1 ? l1.g : 0, w2 = l2 ? 0.5*Math.min(l2.g, 6) : 0;
+    const tr = r.moved ? MOVE_TRUST : 1;   // new team: his old numbers count a bit less
+    const ppg0 = (tr*g1*(l1?l1.ppg:0) + tr*w2*(l2?l2.ppg:0) + 4*R[r.pos]*0.9) / (tr*g1 + tr*w2 + 4), om = outMult(r.out, true), ppg = ppg0*om;
+    const ov = ovrLeft(r.ovr, nowR), miss = Math.max(ov, r.inj ? 0 : expMiss(r.rep)), gl = ov ? Math.max(0, left - ov) : r.inj ? left*0.4 : Math.max(0, left - miss);
+    const base = Math.max(0, ppg - R[r.pos]) * gl;
+    out.push({...r, st:{redraft:true, ppg, preOut:ppg0, om, moved:r.moved, out:r.out, R:R[r.pos], gl, g1, w2, miss, ovr: ov ? r.ovr : null, raw: gl>0 ? (ppg - R[r.pos])*gl : -1e6 + ppg}, base, v: base*(1+(+r.adj||0)/100)});
+  });
+  return {out, R, N, left};
+}
+
+// Tiers by natural breaks: split the top N values into K groups so players inside a tier are as close in value as possible
+// (least total squared distance from each tier's average, solved exactly). K grows with the square root of N; everyone below N is "depth".
+function tierCut(vals, N){
+  const n = Math.min(vals.length, N); if(!n) return [];
+  const K = Math.max(3, Math.min(16, Math.round(Math.sqrt(n)))), MIN = 2;
+  const p1=[0], p2=[0]; for(let i=0;i<n;i++){ p1.push(p1[i]+vals[i]); p2.push(p2[i]+vals[i]*vals[i]); }
+  const sse = (i,j) => { const m=j-i, s=p1[j]-p1[i]; return (p2[j]-p2[i]) - s*s/m; };   // players i..j-1
+  const D = [Array(n+1).fill(Infinity)], B = [[]]; D[0][0] = 0;
+  for(let k=1;k<=K;k++){ D[k]=Array(n+1).fill(Infinity); B[k]=Array(n+1).fill(0);
+    for(let j=k*MIN;j<=n;j++) for(let i=(k-1)*MIN;i<=j-MIN;i++){ const v=D[k-1][i]+sse(i,j); if(v<D[k][j]){ D[k][j]=v; B[k][j]=i; } } }
+  const t = Array(vals.length).fill(99); let j=n;   // 99 = depth, below the tiered part of the board
+  for(let k=K;k>=1;k--){ const i=B[k][j]; for(let x=i;x<j;x++) t[x]=k; j=i; }
+  return t;
+}
+
+// Rookie draft picks, valued as the player they usually turn into on THIS board. The last two rookie classes are lined up
+// best to worst under your format: the best rookie is what 1.01 became, the 13th-best is what 2.01 became (12 teams), and so on.
+// Hindsight makes that too tidy (nobody drafts the bust last), so each slot is averaged with its neighbours and pulled 25% toward
+// its round's average. Picks a year or two out are valued at their round's average, discounted for the wait.
+const PICK_ROUNDS = 4;
+function nextDraftYear(now){ const d = new Date(now); return d.getUTCMonth() >= 4 ? d.getUTCFullYear()+1 : d.getUTCFullYear(); }
+// How strong each upcoming draft class looks, from the owner's read of scouting consensus. Multiplies that year's picks.
+const CLASS_LEVELS = {weak:{f:0.85, label:'Weak'}, average:{f:1, label:'Average'}, strong:{f:1.12, label:'Strong'}, loaded:{f:1.25, label:'Loaded'}};
+const classF = (c, y) => { const l = c.__class && c.__class[y]; return (CLASS_LEVELS[l]||CLASS_LEVELS.average).f; };
+function pickBoard(rows, c, S, now){
+  const nT = c.teams, n = nT*PICK_ROUNDS, curves = [];
+  [S, S-1].forEach(y=>{ const v = rows.filter(r=>r.dy===y).map(r=>r.v).sort((a,b)=>b-a); if(v.length < nT) return;
+    const raw = []; for(let j=0;j<n;j++) raw.push(j < v.length ? v[j] : v[v.length-1]*Math.pow(0.9, j-v.length+1)); curves.push(raw); });
+  if(!curves.length) return [];
+  const raw = curves[0].map((_,j)=>curves.reduce((a,cv)=>a+cv[j],0)/curves.length);
+  const sm = raw.map((_,j)=>{ let a=0,m=0; for(let x=Math.max(0,j-2);x<=Math.min(n-1,j+2);x++){ a+=raw[x]; m++; } return a/m; });
+  const out = [], Y = nextDraftYear(now), pad = x => String(x).padStart(2,'0'), ord = ['1st','2nd','3rd','4th'];
+  for(let r=0;r<PICK_ROUNDS;r++){
+    const seg = sm.slice(r*nT,(r+1)*nT), mean = seg.reduce((a,x)=>a+x,0)/seg.length;
+    seg.forEach((x,i)=>out.push({k:`pk${Y}-${r+1}.${pad(i+1)}`, n:`${Y} Pick ${r+1}.${pad(i+1)}`, pos:'PK', yr:Y, rd:r+1, slot:i+1, v:(0.75*x+0.25*mean)*classF(c,Y)}));
+    (MODES[c.mode]||MODES.neutral).later.forEach((f,yy)=>out.push({k:`pk${Y+yy}-${r+1}`, n:`${Y+yy} ${ord[r]}`+(yy===0?' (slot unknown)':''), pos:'PK', yr:Y+yy, rd:r+1, v:mean*f*classF(c,Y+yy), generic:true}));
+  }
+  return out;
+}
+// trade value: stars are worth more than the sum of parts
+function tradeVal(v, star){ return v>0 ? Math.pow(v, star) : 0; }
+if(typeof module!=='undefined') module.exports = {OUTLOOK,outMult,ovrLeft,expMiss,ATH,CLASS_LEVELS,ROOKSD,BENCH,MODES,TGT,ROOK,TEP0,REF,POS,F,DEF,PRESETS,PV,normName,seasonPts,weighted,lifetime,replacement,rankAll,tradeVal};
+
+/* ===== page ===== */
+const {useState, useEffect, useMemo, useRef} = React;
+const html = htm.bind(React.createElement);
+const fmt = (x, d=0) => x==null || !isFinite(x) ? '–' : Number(x).toFixed(d);
+const fmtV = x => x==null || !isFinite(x) ? '–' : x>0.05 && x<0.5 ? '<1' : Number(x).toFixed(0);   // board values: tiny but real shows as <1, not 0
+const ago = t => { if(!t) return 'never'; const m = Math.round((Date.now()-t)/60000); if(m<2) return 'just now'; if(m<60) return m+' min ago'; const h=Math.round(m/60); if(h<36) return h+' h ago'; return Math.round(h/24)+' days ago'; };
+const lsGet = (k, d) => { try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } };
+const lsSet = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+const seasonNow = () => { const d = new Date(); return d.getUTCMonth() >= 8 ? d.getUTCFullYear() : d.getUTCFullYear()-1; };
+// a week of games is complete after Monday night: this season's numbers are due for a refresh after Tuesday 12:00 UTC
+function lastDue(now){ const d = new Date(now); for(let i=0;i<8;i++){ const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-i, 12)); if(x.getUTCDay()===2 && x.getTime()<=now) return x.getTime(); } return now - 7*864e5; }
+function fmtSummary(c){
+  const q = c.qb>=2 ? '2QB' : c.sf ? 'Superflex' : '1QB';
+  const r = c.ppr===1 ? 'PPR' : c.ppr===0.5 ? 'Half PPR' : 'Standard';
+  return `${c.teams}-team · ${q} · ${r}${c.tep ? ' · TE +'+c.tep : ''}${c.ptd===6 ? ' · 6pt pass TD' : ''}${c.fd ? ' · first downs '+c.fd : ''}${c.league==='redraft' ? ' · Redraft' : c.mode && c.mode!=='neutral' ? ' · '+MODES[c.mode].label : ''}`;
+}
+
+/* ---------- small pieces ---------- */
+function Seg({value, opts, onChange, label}){
+  return html`<div class="seg" role="group" aria-label=${label}>${opts.map(([v,l])=>html`<button key=${String(v)} aria-pressed=${String(value===v)} onClick=${()=>onChange(v)}>${l}</button>`)}</div>`;
+}
+const TEAMC = {ARI:['#97233F','#000000'], ATL:['#A71930','#000000'], BAL:['#241773','#9E7C0C'], BUF:['#00338D','#C60C30'], CAR:['#0085CA','#000000'], CHI:['#0B162A','#E64100'], CIN:['#FB4F14','#000000'], CLE:['#FF3C00','#311D00'], DAL:['#002244','#B0B7BC'], DEN:['#002244','#FB4F14'], DET:['#0076B6','#B0B7BC'], GB:['#203731','#FFB612'], HOU:['#03202F','#A71930'], IND:['#002C5F','#a5acaf'], JAX:['#006778','#000000'], KC:['#E31837','#FFB612'], LA:['#003594','#FFD100'], LAC:['#007BC7','#ffc20e'], LV:['#000000','#A5ACAF'], MIA:['#008E97','#F58220'], MIN:['#4F2683','#FFC62F'], NE:['#002244','#C60C30'], NO:['#D3BC8D','#000000'], NYG:['#0B2265','#A71930'], NYJ:['#003F2D','#000000'], PHI:['#004C54','#A5ACAF'], PIT:['#000000','#FFB612'], SEA:['#002244','#69be28'], SF:['#AA0000','#B3995D'], TB:['#A71930','#322F2B'], TEN:['#4495D2','#D50A0A'], WAS:['#5A1414','#FFB612']};   // team colours (nflverse), for badges
+function lum(h){ const n=parseInt(h.slice(1),16), c=[n>>16&255,n>>8&255,n&255].map(v=>{ v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); }); return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]; }
+function TeamTag({t}){ const c = TEAMC[t]; if(!c) return html`<span class="tm fa">${t||'FA'}</span>`;
+  return html`<span class="tm" style=${{background:c[0], color: lum(c[0])>0.4 ? '#111' : '#fff', boxShadow:'inset 0 -2px 0 '+c[1]}}>${t}</span>`; }
+function PosTag({p, n}){ return html`<span class=${'pos '+p}>${p}${n!=null ? n : ''}</span>`; }
+
+function Row({r, top, onOpen, posView, mv, eg, star}){
+  const mine = posView ? r.prank : r.rank, ex = posView ? r.ecrPos : r.ecrRank, d = ex ? ex - mine : null;
+  const l = r.lines && r.lines[0], left = r.ovr ? ovrLeft(r.ovr, Date.now()) : 0;
+  const d30 = r.d30!=null && Math.abs(r.d30)>=0.5 ? r.d30 : null;
+  return html`<button class=${'row'+(r.tier<=2 ? ' elite' : '')} onClick=${()=>onOpen(r)}>
+    <span class="rk">${r.rank}</span>
+    <span style=${{minWidth:0}}>
+      <div class="nm">${star ? html`<span class="star" aria-label="In My players">★</span> ` : null}${r.n}</div>
+      <div class="meta"><span class="mob"><${PosTag} p=${r.pos} n=${r.prank}/></span><${TeamTag} t=${r.team}/><span class="mob">${fmt(r.ageNow,1)}</span>${l ? html`<span class="mob">${fmt(l.ppg,1)} ppg</span>` : null}
+        ${r.inj ? html`<span class="tag inj">${r.inj}</span>` : null}
+        ${left ? html`<span class="tag inj" title=${r.ovr.note||''}>Out ~${left}g${r.ovr.auto?' · news':''}</span>` : null}
+        ${!r.inj && r.rep && !left ? html`<span class=${'tag '+(r.rep.s==='Out'||r.rep.s==='Doubtful'?'inj':'adj')} title=${r.rep.what}>${r.rep.s==='DNP'?'Missed practice':r.rep.s}${r.rep.what?' · '+r.rep.what.toLowerCase():''}${r.rep.out>1?' · '+r.rep.out+' wks':''}</span>` : null}
+        ${r.moved ? html`<span class="tag new" title=${'Changed teams: '+r.moved.from+' to '+r.moved.to}>New team</span>` : null}
+        ${r.out && r.out.f ? html`<span class=${'tag '+(r.out.f>0?'up':'inj')} title=${r.out.note||''}>${r.out.f>0?'▲':'▼'} outlook</span>` : null}
+        ${r.st.rookie ? html`<span class="tag rook">No games yet</span>` : null}
+        ${r.adj ? html`<span class="tag adj">${r.adj>0?'+':''}${r.adj}%</span>` : null}
+        ${mv && r.d30!=null ? html`<span class="ecr">since wk ${mv}: <b class=${r.d30>=0?'up':'dn'}>${r.d30>=0?'+':''}${fmt(r.d30)}</b>${r.r30Overall && r.r30Overall!==r.rank ? ` · was #${r.r30Overall}` : ''}</span>` : null}
+        ${ex ? html`<span class="ecr mob" title=${'Expert consensus rank '+ex}>ECR ${ex}${d ? html` <b class=${d>0?'up':'dn'}>${d>0?'▲'+d:'▼'+(-d)}</b>` : null}</span>` : null}
+        ${eg && r.eGap!=null ? html`<span class="ecr"><b class=${r.eGap>0?'up':'dn'}>${r.eGap>0?'+':''}${fmt(r.eGap)} value</b> vs ECR spot</span>` : null}</div>
+    </span>
+    <span class="c"><${PosTag} p=${r.pos} n=${r.prank}/></span>
+    <span class="c">${fmt(r.ageNow,1)}</span>
+    <span class="c">${l ? fmt(l.ppg,1) : '–'}</span>
+    <span class="val"><b>${fmtV(r.v)}</b><div class="bar"><i class=${r.pos} style=${{width: Math.max(2, 100*r.v/top)+'%'}}></i></div>${d30!=null ? html`<span class=${'d '+(d30>0?'up':'dn')}>${d30>0?'+':''}${fmt(d30)} 30d</span>` : null}</span>
+    <span class=${'c '+(d30==null?'':d30>0?'up':'dn')}>${d30==null ? '–' : (d30>0?'+':'')+fmt(d30)}</span>
+    <span class="c">${ex ? html`${ex}${d ? html` <b class=${d>0?'up':'dn'} style=${{fontWeight:600}}>${d>0?'▲'+d:'▼'+(-d)}</b>` : null}` : '–'}</span>
+  </button>`;
+}
+
+const AGES = [['all','Any age'],['u24','24 & under'],['25-28','25–28'],['29+','29+']];
+function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine}){
+  const red = cfg.league==='redraft';
+  const [pos, setPos] = useState(()=>lsGet('dvb.pos','ALL'));
+  const [sort, setSort] = useState('rank');
+  const [col, setCol] = useState({k:'rank', dir:1});
+  const [team, setTeam] = useState('all'), [age, setAge] = useState('all');
+  const [q, setQ] = useState('');
+  const [lim, setLim] = useState(150);
+  useEffect(()=>lsSet('dvb.pos', pos), [pos]);
+  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No players yet</b><span>Player stats haven't been loaded yet. They're pulled every Tuesday and Saturday.</span></div>`;
+  if(pos==='PK' && red){ setTimeout(()=>setPos('ALL'),0); }
+  const posOpts = [['ALL','All'],['QB','QB'],['RB','RB'],['WR','WR'],['TE','TE'], ...(red?[]:[['PK','Picks']]), ['MINE','★ Mine']];
+  const modeBar = html`<div class="controls"><${Seg} label="League type" value=${cfg.league||'dynasty'} onChange=${v=>setCfg({...cfg, league:v})} opts=${[['dynasty','Dynasty'],['redraft','Redraft']]}/>${red ? null : html`<${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/>`}</div>`;
+  if(pos==='PK' && !red) return html`<div class="toolbar">${modeBar}<div class="controls"><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${posOpts}/></div></div><${Picks} M=${M} classes=${classes} canEdit=${canEdit} onClass=${onClass}/>`;
+  const posView = pos!=='ALL' && pos!=='MINE', qq = normName(q);
+  const mineR = r => posView ? r.prank : r.rank, ecrR = r => posView ? r.ecrPos : r.ecrRank;
+  const isMine = pos==='MINE';
+  const ageOk = r => age==='all' || (age==='u24' ? r.ageNow<25 : age==='25-28' ? r.ageNow>=25 && r.ageNow<29 : r.ageNow>=29);
+  let rows = M.rows.filter(r=>(pos==='ALL'||r.pos===pos||(isMine && mine.has(r.k))) && (!qq || normName(r.n).includes(qq)) && (team==='all' || r.team===team) && ageOk(r));
+  const hasEcr = M.rows.some(r=>r.ecrRank);
+  const isEcr = sort==='above' || sort==='below', isMove = sort==='up' || sort==='down';
+  if(isEcr){   // biggest disagreements with the experts, measured in value: where the experts rank him, what is that spot worth on your board?
+    const ladder = (posView ? M.rows.filter(r=>r.pos===pos) : M.rows).map(r=>r.v);
+    rows.forEach(r=>{ const e = ecrR(r); r.eGap = e ? r.v - ladder[Math.min(ladder.length, e)-1] : null; });
+    rows = rows.filter(r=>r.eGap!=null && (sort==='above' ? r.eGap>0.5 : r.eGap<-0.5));
+    rows.sort((a,b)=> sort==='above' ? b.eGap-a.eGap : a.eGap-b.eGap);
+  }
+  if(isMove){  // value gained or lost over the last four weeks of games, among players in the top 300 now or then
+    rows = rows.filter(r=>r.d30!=null && (r.rank<=300 || (r.r30Overall||999)<=300) && (sort==='up' ? r.d30>0.5 : r.d30<-0.5));
+    rows.sort((a,b)=> sort==='up' ? b.d30-a.d30 : a.d30-b.d30);
+  }
+  // column sorting (My ranks view): value order is the board; other columns re-sort without tiers
+  const colSorted = sort==='rank' && col.k!=='rank';
+  if(colSorted){
+    const key = {age:r=>r.ageNow, ppg:r=>r.lines&&r.lines[0]?r.lines[0].ppg:-1, d30:r=>r.d30==null?-1e9:r.d30, ecr:r=>ecrR(r)||1e9, pos:r=>r.pos+String(r.prank).padStart(4,'0')}[col.k];
+    rows = rows.slice().sort((a,b)=> (key(a)>key(b)?1:key(a)<key(b)?-1:0)*col.dir || a.rank-b.rank);
+  }
+  const top = M.rows[0].v, tierOf = r => posView ? r.ptier : r.tier;
+  const shown = rows.slice(0, lim), groups = [];
+  if(sort!=='rank') groups.push({label: {above:'Worth more on your board than where the experts rank him', below:'Worth less on your board than where the experts rank him', up:`Risers since week ${M.w30}`, down:`Fallers since week ${M.w30}`}[sort], rows:shown});
+  else if(colSorted) groups.push({label:`Sorted by ${ {age:'age', ppg:'points per game', d30:'30-day change', ecr:'expert rank', pos:'position'}[col.k] }`, rows:shown});
+  else shown.forEach(r=>{ const t = tierOf(r), g = groups[groups.length-1]; if(!g || g.t!==t) groups.push({t, rows:[r]}); else g.rows.push(r); });
+  groups.forEach(g=>{ if(g.t==null) return; g.gold = g.t<=2; g.label = g.t===99 ? 'Depth' : html`<b>Tier ${g.t}</b> · ${fmt(g.rows[0].v)}–${fmt(g.rows[g.rows.length-1].v)}`; });
+  const teams = [...new Set(M.rows.map(r=>r.team).filter(Boolean))].sort();
+  const H = (k, label, cls) => html`<button class=${(col.k===k && sort==='rank' ? 'on ' : '')+(cls||'')} onClick=${()=>{ setSort('rank'); setCol(col.k===k ? {k, dir:-col.dir} : {k, dir: k==='d30'||k==='ppg' ? -1 : 1}); }}>${label}${col.k===k && sort==='rank' && k!=='rank' ? (col.dir>0?' ↑':' ↓') : ''}</button>`;
+  return html`<div class="toolbar">
+      ${modeBar}
+      <div class="controls"><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${posOpts}/>
+        </div>
+      <div class="controls">
+        <select class="sel" aria-label="View" value=${sort} onChange=${e=>{ setSort(e.target.value); setLim(150); }}>
+          ${[['rank','My ranks'], ...(M.w30?[['up','Risers · 30 days'],['down','Fallers · 30 days']]:[]), ...(hasEcr?[['above','Above consensus'],['below','Below consensus']]:[])].map(([v,l])=>html`<option key=${v} value=${v}>${l}</option>`)}
+        </select>
+        <select class="sel" aria-label="Team" value=${team} onChange=${e=>setTeam(e.target.value)}><option value="all">All teams</option>${teams.map(t=>html`<option key=${t} value=${t}>${t}</option>`)}</select>
+        <select class="sel" aria-label="Age" value=${age} onChange=${e=>setAge(e.target.value)}>${AGES.map(([v,l])=>html`<option key=${v} value=${v}>${l}</option>`)}</select>
+        <input id="search" class="search" type="search" placeholder="Search players" value=${q} onInput=${e=>setQ(e.target.value)}/>
+      </div>
+    </div>
+    ${isMove ? html`<p class="note">Change in value since week ${M.w30} (about 30 days of games), in your format and team direction. Production and age only; injuries aren't counted as a fall.</p>` : null}
+    ${red ? html`<p class="note">Redraft: value is rest-of-season points above a replacement starter in your lineup (${M.left} games left).${(M.cfg.sf||M.cfg.qb>=2) ? ' Expert consensus for redraft is 1QB only, so it is hidden in superflex.' : ''}</p>` : null}
+    ${!isMove && hasEcr && M.ecrAt ? html`<p class="note">ECR = FantasyPros expert consensus (${M.redraft ? '1QB redraft' : (M.cfg.sf||M.cfg.qb>=2)?'superflex dynasty':'1QB dynasty'}, ${M.ecrAt}), for comparison only. ▲ means you have him higher than the experts do${posView?' at the position':''}.${isEcr ? ` Sorted by value gap: his value minus what your board pays for the spot the experts rank him at.` : ''}</p>` : null}
+    ${isMine ? html`<div class="panel minesum">${mine.size ? html`<div class="tiles">
+        <div><span>Players</span><b>${rows.length}</b></div>
+        <div><span>Total value</span><b>${fmt(rows.reduce((s,r)=>s+r.v,0))}</b></div>
+        <div><span>As one player</span><b>${fmt(Math.pow(rows.reduce((s,r)=>s+tradeVal(r.v, M.cfg.star),0), 1/M.cfg.star))}</b></div>
+        <div><span>Top 100 players</span><b>${rows.filter(r=>r.rank<=100).length}</b></div></div>
+        <p class="note" style=${{marginTop:8}}>Open a player and tap ☆ to add or remove. Your list stays on this device.</p>`
+      : html`<p class="sub"><b>No players yet.</b> Open any player and tap ☆ to track your roster here, with its total value.</p>`}</div>` : null}
+    <div class="tbl">
+      <div class="thead">${H('rank','#','r')}<span>Player</span>${H('pos','Pos','r')}${H('age','Age','r')}${H('ppg','PPG','r')}<span>${H('rank','Value')}</span>${H('d30','30d','r')}${H('ecr','ECR','r')}</div>
+      ${groups.map((g,i)=>html`<div class="rowgrp" key=${'g'+i+'-'+(g.rows[0]?g.rows[0].k:'')}><div class=${'tier'+(g.gold?' gold':'')}>${g.label}</div>${g.rows.map(r=>html`<${Row} key=${r.k} r=${r} top=${top} onOpen=${onOpen} posView=${posView} mv=${isMove ? M.w30 : null} eg=${isEcr} star=${mine.has(r.k)}/>`)}</div>`)}
+      ${!rows.length ? html`<div class="empty"><b>No match</b><span>Nobody on the board matches those filters.</span></div>` : null}
+      ${rows.length > lim ? html`<div class="more"><button class="btn" onClick=${()=>setLim(lim+150)}>Show ${Math.min(150, rows.length-lim)} more</button></div>` : null}
+    </div>`;
+}
+
+function Mini({rows, onOpen, right}){
+  return html`<div class="mini">${rows.map((r,i)=>html`<button key=${r.k} onClick=${()=>onOpen(r)}>
+    <span class="n">${r.rank}</span><span class="nm">${r.n}<small><${PosTag} p=${r.pos} n=${r.prank}/> · ${r.team||'FA'} · ${fmt(r.ageNow,1)}</small></span><span class="v">${right ? right(r) : fmtV(r.v)}</span></button>`)}</div>`;
+}
+function Dashboard({M, D, cfg, mine, onOpen, go}){
+  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No players yet</b><span>Player stats haven't been loaded yet.</span></div>`;
+  const R = M.rows, top100 = R.slice(0,100), cols = {QB:'var(--qb)', RB:'var(--rb)', WR:'var(--wr)', TE:'var(--te)'};
+  const byPos = POS.map(q=>({q, n:top100.filter(r=>r.pos===q).length, v:top100.filter(r=>r.pos===q).reduce((s,r)=>s+r.v,0)}));
+  const vTot = byPos.reduce((s,x)=>s+x.v,0) || 1;
+  const tiers = []; R.forEach(r=>{ if(r.tier===99) return; const t = tiers[r.tier-1] || (tiers[r.tier-1] = {t:r.tier, n:0, hi:r.v, lo:r.v}); t.n++; t.lo = Math.min(t.lo, r.v); });
+  const maxN = Math.max(...tiers.filter(Boolean).map(t=>t.n), 1);
+  const ups = R.filter(r=>r.d30!=null && r.rank<=250).sort((a,b)=>b.d30-a.d30).slice(0,5);
+  const downs = R.filter(r=>r.d30!=null && r.rank<=250).sort((a,b)=>a.d30-b.d30).slice(0,5);
+  const lad = R.map(r=>r.v), gap = r => r.ecrRank ? r.v - lad[Math.min(lad.length, r.ecrRank)-1] : null;
+  const above = R.filter(r=>gap(r)!=null).sort((a,b)=>gap(b)-gap(a)).slice(0,5), below = R.filter(r=>gap(r)!=null).sort((a,b)=>gap(a)-gap(b)).slice(0,5);
+  const watch = R.filter(r=>(r.ovr && ovrLeft(r.ovr, Date.now())) || r.inj || (r.out && r.out.f) || r.moved).filter(r=>r.rank<=150).slice(0,8);
+  const rookies = R.filter(r=>r.dy===M.season).slice(0,5);
+  const sign = x => (x>0?'+':'')+fmt(x);
+  const now = Date.now();
+  return html`<div class="hero-strip"><div><div class="eyebrow">${fmtSummary(M.cfg)}</div><h1>${M.redraft ? 'Rest-of-season board' : 'Dynasty board'}</h1></div>
+      <div class="controls"><span class="chip"><span class="dot"></span>Stats through week ${D.meta && D.meta.wk || '–'} · ${ago(D.meta && D.meta.at)}</span><button class="btn primary" onClick=${()=>go('board')}>Full rankings</button></div></div>
+    <div class="kpis">
+      <div class="kpi"><span class="eyebrow">Top asset</span><b>${R[0].n.split(' ').slice(-1)[0]}</b><em>${R[0].pos} · ${fmtV(R[0].v)} value</em></div>
+      <div class="kpi"><span class="eyebrow">Elite tiers</span><b>${R.filter(r=>r.tier<=2).length}</b><em>players in tiers 1–2</em></div>
+      <div class="kpi"><span class="eyebrow">Biggest riser</span><b>${ups[0] ? sign(ups[0].d30) : '–'}</b><em>${ups[0] ? ups[0].n : 'no 30-day data'}</em></div>
+      <div class="kpi"><span class="eyebrow">Injury watch</span><b>${R.filter(r=>r.rank<=150 && ((r.ovr && ovrLeft(r.ovr, now)) || r.inj)).length}</b><em>top-150 players hurt</em></div>
+    </div>
+    <div class="dash">
+      <div class="panel s7"><h2>Top 10</h2><p class="sub">Tap a player for the full profile.</p><${Mini} rows=${R.slice(0,10)} onOpen=${onOpen}/></div>
+      <div class="panel s5"><h2>Top 100 by position</h2><p class="sub">Who holds the value at the top of the board.</p>
+        <div class="stack">${byPos.map(x=>html`<i key=${x.q} style=${{width:(100*x.v/vTot)+'%', background:cols[x.q]}} title=${x.q}></i>`)}</div>
+        <div class="legend">${byPos.map(x=>html`<div key=${x.q}><span><i style=${{background:cols[x.q]}}></i>${x.q}</span><span class="mono">${x.n} · ${fmt(100*x.v/vTot)}%</span></div>`)}</div>
+        <h3>Tiers</h3>
+        <div class="ladder">${tiers.filter(Boolean).slice(0,10).map(t=>html`<div key=${t.t}><span class="lb">Tier ${t.t}</span><span class="tr"><i class=${t.t<=2?'g':''} style=${{width:(100*t.n/maxN)+'%'}}></i></span><span class="rg">${t.n} · ${fmt(t.hi)}–${fmt(t.lo)}</span></div>`)}</div></div>
+      ${ups.length ? html`<div class="panel s6"><h2>Movers · 30 days</h2><p class="sub">Value change since week ${M.w30}.</p>
+        <div class="twocol"><div><div class="eyebrow up" style=${{marginTop:8}}>Rising</div><${Mini} rows=${ups} onOpen=${onOpen} right=${r=>html`<span class="up">${sign(r.d30)}</span>`}/></div>
+        <div><div class="eyebrow dn" style=${{marginTop:8}}>Falling</div><${Mini} rows=${downs} onOpen=${onOpen} right=${r=>html`<span class="dn">${sign(r.d30)}</span>`}/></div></div></div>` : null}
+      ${above.length ? html`<div class="panel s6"><h2>Vs the experts</h2><p class="sub">Biggest value gaps against FantasyPros consensus (${M.ecrAt}).</p>
+        <div class="twocol"><div><div class="eyebrow up" style=${{marginTop:8}}>You're higher</div><${Mini} rows=${above} onOpen=${onOpen} right=${r=>html`<span class="up">${sign(gap(r))}</span>`}/></div>
+        <div><div class="eyebrow dn" style=${{marginTop:8}}>You're lower</div><${Mini} rows=${below} onOpen=${onOpen} right=${r=>html`<span class="dn">${sign(gap(r))}</span>`}/></div></div></div>` : null}
+      <div class="panel s7"><h2>Watch list</h2><p class="sub">Injuries, team changes and outlook calls among the top 150.</p>
+        ${watch.length ? html`<${Mini} rows=${watch} onOpen=${onOpen} right=${r=>{ const l = r.ovr ? ovrLeft(r.ovr, now) : 0; return l ? html`<span class="tag inj">Out ~${l}g</span>` : r.inj ? html`<span class="tag inj">${r.inj}</span>` : r.out && r.out.f ? html`<span class=${'tag '+(r.out.f>0?'up':'inj')}>${r.out.f>0?'▲':'▼'} outlook</span>` : html`<span class="tag new">New team</span>`; }}/>` : html`<p class="sub">Nothing flagged right now.</p>`}</div>
+      <div class="panel s5"><h2>${M.season} rookies</h2><p class="sub">The class so far, on your board.</p>
+        ${rookies.length ? html`<${Mini} rows=${rookies} onOpen=${onOpen}/>` : html`<p class="sub">No rookies on the board yet.</p>`}
+        ${mine.size ? html`<h3>My players</h3><div class="kv"><span>${mine.size} tracked</span><span class="mono">${fmt(R.filter(r=>mine.has(r.k)).reduce((s,r)=>s+r.v,0))} total</span></div>` : null}</div>
+    </div>`;
+}
+
+function Picks({M, classes, canEdit, onClass}){
+  const P = M.picks || [];
+  if(!P.length) return html`<div class="panel empty"><b>No pick values yet</b><span>Pick values come from the last two rookie classes, which haven't loaded.</span></div>`;
+  const top = M.rows[0].v, Y = P[0].yr;
+  const near = r => { const i = M.rows.findIndex(x=>x.v < r.v); const x = M.rows[Math.max(0,(i<0?M.rows.length:i)-1)]; return x; };
+  const groups = [];
+  for(let rd=1; rd<=4; rd++) groups.push({label:`${Y} round ${rd}`, rows:P.filter(p=>p.yr===Y && p.rd===rd && !p.generic)});
+  groups.push({label:'Slot unknown or future years', rows:P.filter(p=>p.generic)});
+  const yrs = [Y, Y+1, Y+2], C = (classes&&classes.years)||{}, why = (classes&&classes.why)||{};
+  const classPanel = html`<div class="panel"><h2>Draft class strength</h2>
+    <p class="sub">The values below start from how recent rookie classes actually turned out, then each future class is scaled by how strong it looks: Weak −15%, Average, Strong +12%, Loaded +25%.</p>
+    ${yrs.map(y=>{ const l = C[y]||'average'; return html`<div key=${y} style=${{marginTop:10}}>
+      <div style=${{display:'grid',gap:6}}><div><b>${y} class</b> <span class="sub">${why[y] || 'No strong read yet, so it counts as average.'}</span></div>
+      ${canEdit ? html`<${Seg} label=${y+' class strength'} value=${l} onChange=${v=>onClass(y, v)} opts=${[['weak','Weak'],['average','Avg'],['strong','Strong'],['loaded','Loaded']]}/>` : html`<span class="chip">${CLASS_LEVELS[l].label}</span>`}</div></div>`; })}
+  </div>`;
+  return html`${classPanel}<p class="note">A pick is worth the player it usually becomes on this board: the last two rookie classes (${M.season} and ${M.season-1}) are lined up best to worst in your format, smoothed, and pulled a little toward each round's average. Future picks use the round average, minus 10% a year. Values move with your format and with how those rookies play.</p>
+    <div class="board">${groups.map(g=>html`<div class="tbl" key=${g.label}><div class="tier"><b>${g.label}</b></div><div class="rowgrp">${g.rows.map(p=>{ const nb = near(p); return html`<div class="row" key=${p.k}>
+      <span class="rk" style=${{fontSize:16}}>${p.generic ? p.rd+(['st','nd','rd','th'][p.rd-1]) : p.rd+'.'+String(p.slot).padStart(2,'0')}</span>
+      <span style=${{minWidth:0}}><div class="nm">${p.n}</div><div class="meta"><span>about the same as ${nb ? nb.n+' (#'+nb.rank+')' : '–'}</span></div></span>
+      <span class="val"><b>${fmt(p.v)}</b><div class="bar"><i class="PK" style=${{width: Math.max(2, 100*p.v/top)+'%'}}></i></div></span></div>`; })}</div></div>`)}</div>`;
+}
+
+function InjOverride({r, onSave}){
+  const cur = r.ovr ? ovrLeft(r.ovr, Date.now()) : 0;
+  const [g, setG] = useState(cur), [note, setNote] = useState((r.ovr&&r.ovr.note)||'');
+  return html`<div class="step"><span class="n">+</span><div style=${{minWidth:0}}><div class="t">Injury news</div>
+    ${r.ovr && r.ovr.auto ? html`<p class="sub">Checked automatically ${new Date(r.ovr.at).toLocaleDateString([], {month:'short', day:'numeric'})}: ${r.ovr.note}${r.ovr.src ? html` · <a href=${r.ovr.src} target="_blank" rel="noopener">source</a>` : null}</p>` : null}
+    <p class="sub">Injury news is checked automatically twice a week for hurt players who matter. To overrule it, set the games he'll miss yourself; your setting is never replaced by the automatic check. It counts down a game each week and clears itself.</p>
+    <div class="controls"><${Seg} label="Games out" value=${g} onChange=${setG} opts=${[[0,'None'],[1,'1'],[2,'2'],[3,'3'],[4,'4'],[5,'5'],[6,'6'],[8,'8'],[17,'Season']]}/></div>
+    <div class="controls" style=${{marginTop:8}}><input id="injnote" class="search" placeholder="Source or note (optional)" value=${note} onInput=${e=>setNote(e.target.value)}/>
+    <button class="btn primary" disabled=${g===cur && note===((r.ovr&&r.ovr.note)||'')} onClick=${()=>onSave(r.k, g, note)}>Save</button></div></div></div>`;
+}
+function SheetHead({r, M, onClose, starred, onStar, sub}){
+  const l = r.lines && r.lines[0];
+  return html`<div style=${{display:'flex',justifyContent:'space-between',gap:10,alignItems:'flex-start'}}>
+      <div style=${{minWidth:0}}><h2>${r.n}</h2>
+        <div class="meta" style=${{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',color:'var(--muted)',fontSize:13,marginTop:6}}><${PosTag} p=${r.pos}/><${TeamTag} t=${r.team}/>${r.inj?html`<span class="tag inj">${r.inj}</span>`:null}${r.moved?html`<span class="tag new">New team</span>`:null}</div></div>
+      <div style=${{display:'flex',gap:6,flexShrink:0}}><button class=${'btn iconbtn'+(starred?' on':'')} onClick=${()=>onStar(r.k)} aria-pressed=${String(!!starred)} title=${starred?"Remove from My players":"Add to My players"}>${starred?'★':'☆'}</button>
+      <button class="btn" onClick=${onClose} aria-label="Close">Close</button></div></div>
+    <div class="tiles sheettiles">
+      <div class="hero"><span>Value</span><b>${fmt(r.v)}</b><em>${sub}${r.d30!=null && Math.abs(r.d30)>=0.5 ? html` · <span class=${r.d30>0?"up":"dn"}>${r.d30>0?"+":""}${fmt(r.d30)} in 30 days</span>` : null}</em></div>
+      <div><span>Rank</span><b>#${r.rank}</b><em>${r.pos}${r.prank}</em></div>
+      <div><span>Age</span><b>${fmt(r.ageNow,1)}</b><em>${r.dy ? r.dy+' class' : ''}</em></div>
+      <div><span>This season</span><b>${l ? fmt(l.ppg,1) : '–'}</b><em>${l ? l.g+' games, ppg' : 'no games'}</em></div>
+      <div><span>ECR</span><b>${r.ecrRank ? '#'+r.ecrRank : '–'}</b><em>${r.ecrRank ? r.pos+r.ecrPos : 'not ranked'}</em></div>
+    </div>`;
+}
+// Big changes: team moves (automatic) and outlook notes (owner, or the twice-weekly news check)
+function Situation({r, M, canEdit, onSave}){
+  const st = r.st, o = r.out;
+  const [f, setF] = useState(o && o.f || 0), [note, setNote] = useState((o&&o.note)||'');
+  const lbl = {'-2':'Much worse','-1':'Worse','0':'No change','1':'Better','2':'Much better'};
+  if(!r.moved && !o && !canEdit) return null;
+  return html`<div class="step"><span class="n">⇄</span><div style=${{minWidth:0}}><div class="t">Situation</div>
+    ${r.moved ? html`<p class="sub">Changed teams (${r.moved.from} → ${r.moved.to}). His numbers came in another offense, so they count 25% less and his range of outcomes is wider until he builds a record there.</p>` : null}
+    ${o && o.f ? html`<p class="sub">Outlook: <b>${lbl[o.f]}</b>${o.note ? ' — '+o.note : ''}${o.src ? html` · <a href=${o.src} target="_blank" rel="noopener">source</a>` : null}${o.auto ? ' (news check, '+new Date(o.at).toLocaleDateString([], {month:'short', day:'numeric'})+')' : ''}. Expected scoring ${st.preOut ? fmt(st.preOut,1)+' → '+fmt(st.ppg,1)+' PPG' : 'adjusted'}${M.redraft ? '' : ' (dynasty uses 60% of the change)'}.</p>` : null}
+    ${canEdit ? html`<p class="sub">New role, new QB, a trade, a coaching change? Set his outlook. Your setting is never replaced by the automatic news check.</p>
+      <div class="controls"><${Seg} label="Outlook" value=${f} onChange=${setF} opts=${[[-2,'Much worse'],[-1,'Worse'],[0,'None'],[1,'Better'],[2,'Much better']]}/></div>
+      <div class="controls" style=${{marginTop:8}}><input id="outnote" class="search" placeholder="Why (optional)" value=${note} onInput=${e=>setNote(e.target.value)}/>
+      <button class="btn primary" disabled=${f===((o&&o.f)||0) && note===((o&&o.note)||'')} onClick=${()=>onSave(r.k, f, note)}>Save</button></div>` : null}
+  </div></div>`;
+}
+function PpgChart({r, M}){
+  const S = M.season, L = [2,1,0].map(i=>({y:S-i, l:r.lines[i]})), mx = Math.max(1, ...L.map(x=>x.l?x.l.ppg:0));
+  const W=240, H=120, bw=44, gap=(W-3*bw)/4;
+  return html`<div class="chart"><div class="eyebrow">Points per game · your scoring</div>
+    <svg viewBox=${`0 0 ${W} ${H+18}`} role="img" aria-label="Points per game by season">
+      <line x1="0" x2=${W} y1=${H} y2=${H} stroke="var(--line2)"/>
+      ${L.map((x,i)=>{ const v = x.l ? x.l.ppg : 0, h = (H-18)*v/mx, X = gap+i*(bw+gap); return html`<g key=${x.y}>
+        <rect x=${X} y=${H-h} width=${bw} height=${Math.max(h,1)} rx="4" fill=${i===2?'var(--accent)':'var(--line2)'}/>
+        <text x=${X+bw/2} y=${H-h-5} text-anchor="middle" fill="var(--ink2)">${x.l ? fmt(v,1) : '–'}</text>
+        <text x=${X+bw/2} y=${H+13} text-anchor="middle">${x.y}${x.l ? ' · '+x.l.g+'g' : ''}</text></g>`; })}
+    </svg></div>`;
+}
+function CareerChart({r}){
+  const ys = (r.st.yrs||[]).slice(0,14); if(ys.length<2) return null;
+  const W=240, H=110, mx = Math.max(...ys.map(y=>y.yv), 1), sx = i => 6 + i*(W-12)/(ys.length-1), sy = v => H - (H-14)*v/mx;
+  const line = ys.map((y,i)=>(i?'L':'M')+sx(i).toFixed(1)+' '+sy(y.yv).toFixed(1)).join(' ');
+  return html`<div class="chart"><div class="eyebrow">Value by future season</div>
+    <svg viewBox=${`0 0 ${W} ${H+18}`} role="img" aria-label="Value contributed by each future season">
+      <defs><linearGradient id="cg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".45"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+      <line x1="0" x2=${W} y1=${H} y2=${H} stroke="var(--line2)"/>
+      <path d=${line+` L${sx(ys.length-1).toFixed(1)} ${H} L${sx(0).toFixed(1)} ${H} Z`} fill="url(#cg)"/>
+      <path d=${line} fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <circle cx=${sx(0)} cy=${sy(ys[0].yv)} r="3.5" fill="var(--accent)"/>
+      ${ys.map((y,i)=> i%2===0 || i===ys.length-1 ? html`<text key=${i} x=${sx(i)} y=${H+13} text-anchor="middle">${Math.floor(y.age)}</text>` : null)}
+    </svg><p class="note" style=${{margin:'4px 0 0'}}>By age. Fades as the odds he's still a fantasy starter fall.</p></div>`;
+}
+function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar}){
+  const [adj, setAdj] = useState(r.adj||0);
+  useEffect(()=>{ const f = e=>{ if(e.key==='Escape') onClose(); }; window.addEventListener('keydown', f); return ()=>window.removeEventListener('keydown', f); }, []);
+  const c = PV[r.pos], st = r.st, S = M.season;
+  if(st.redraft) return html`<div class="scrim" onClick=${e=>{ if(e.target===e.currentTarget) onClose(); }}>
+   <div class="sheet" role="dialog" aria-modal="true" aria-label=${r.n}>
+    <${SheetHead} r=${r} M=${M} onClose=${onClose} starred=${starred} onStar=${onStar} sub=${'rest of season'}/>
+    <div class="sec"><span class="eyebrow">Production</span><div class="charts"><${PpgChart} r=${r} M=${M}/></div></div>
+    <div class="sec"><span class="eyebrow">Situation</span><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/></div>
+    <div class="sec"><span class="eyebrow">How the value is built</span>
+    <div class="step"><span class="n">1</span><div style=${{minWidth:0}}><div class="t">This season and last, your scoring</div>
+      <div class="tscroll"><table><thead><tr><th>Season</th><th>G</th><th>PPG</th><th>Counts as</th></tr></thead><tbody>
+      <tr><td>${S}</td><td>${st.g1}</td><td>${r.lines[0]?fmt(r.lines[0].ppg,1):'–'}</td><td>${st.g1} games</td></tr>
+      <tr><td>${S-1}</td><td>${r.lines[1]?r.lines[1].g:0}</td><td>${r.lines[1]?fmt(r.lines[1].ppg,1):'–'}</td><td>${fmt(st.w2,1)} games</td></tr></tbody></table></div></div></div>
+    <div class="step"><span class="n">2</span><div style=${{minWidth:0}}><div class="t">Rest-of-season PPG</div>
+      <p class="sub">Four phantom games just under replacement keep a hot or cold few weeks from deciding everything.</p>
+      <div class="eq">expected PPG = ${fmt(st.ppg,2)} · replacement ${r.pos} = ${fmt(st.R,2)}</div></div></div>
+    <div class="step"><span class="n">3</span><div style=${{minWidth:0}}><div class="t">Games left</div>
+      <p class="sub">${M.left} games left in the fantasy regular season${st.ovr ? `; injury news has him out about ${fmt(st.miss,0)} more${st.ovr.note?' ('+st.ovr.note+')':''}, so those come off` : r.inj ? `; he's ${r.inj}, so only 40% of them are counted` : st.miss ? `; injury report says ${r.rep.s==='DNP'?'missed practice':r.rep.s.toLowerCase()}${r.rep.what?' ('+r.rep.what.toLowerCase()+')':''}, so about ${fmt(st.miss,1)} of them come off` : ''}.</p>
+      <div class="eq">(${fmt(st.ppg,2)} − ${fmt(st.R,2)}) × ${fmt(st.gl,1)} = ${fmt(r.base,1)}${r.adj ? ` → ${r.adj>0?'+':''}${r.adj}% → ${fmt(r.v,1)}` : ''}</div></div></div></div>
+    ${canEdit ? html`<div class="sec"><span class="eyebrow">Owner tools</span><${InjOverride} r=${r} onSave=${onInj}/></div>` : null}
+   </div></div>`;
+  const ws = [c.a1, 1, c.a3];
+  const maxY = Math.max(...st.yrs.map(y=>y.yv), 1);
+  return html`<div class="scrim" onClick=${e=>{ if(e.target===e.currentTarget) onClose(); }}>
+   <div class="sheet" role="dialog" aria-modal="true" aria-label=${r.n}>
+    <${SheetHead} r=${r} M=${M} onClose=${onClose} starred=${starred} onStar=${onStar} sub=${r.tier===99?'depth':'tier '+r.tier}/>
+    <p class="note">${fmtSummary(M.cfg)}. ${r.dp ? 'Drafted pick '+r.dp+' overall.' : 'Draft slot unknown.'}${r.ecrRank ? ` Expert consensus #${r.ecrRank} (${r.pos}${r.ecrPos}), for comparison only.` : ''}</p>
+    <div class="sec"><span class="eyebrow">Profile</span><div class="charts"><${PpgChart} r=${r} M=${M}/><${CareerChart} r=${r}/></div></div>
+    <div class="sec"><span class="eyebrow">Situation</span><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/>
+    ${r.ath!=null && r.pos!=='WR' ? html`<p class="sub">Athleticism: ${r.ath>=0?'+':''}${fmt(r.ath,1)} SD vs ${r.pos}s at the combine.${r.dp && st.dpE && Math.abs(st.dpE-r.dp)>=0.5 ? ` While draft slot still counts for him, that plays like pick ${fmt(st.dpE)} instead of ${r.dp}.` : r.pos==='WR' ? ' It isn\'t used for WRs: it hasn\'t predicted WR production beyond draft slot.' : ''}</p>` : null}
+    </div>
+    <div class="sec"><span class="eyebrow">How the value is built</span>
+    <div class="step"><span class="n">1</span><div style=${{minWidth:0}}><div class="t">Production under your scoring</div>
+      <div class="tscroll"><table><thead><tr><th>Season</th><th>G</th><th>Pts</th><th>PPG</th><th>Weight</th></tr></thead><tbody>
+      ${[S,S-1,S-2].map((y,i)=>{ const l = r.lines[i]; return html`<tr key=${y}><td>${y}</td><td>${l?l.g:0}</td><td>${l?fmt(l.pts,1):'–'}</td><td>${l?fmt(l.ppg,1):'–'}</td><td>${fmt(ws[i],2)}×</td></tr>`; })}
+      </tbody></table></div>
+      <div class="eq">weighted PPG = Σ(weight × points) ÷ Σ(weight × games) = ${r.w.den ? fmt(r.w.ppg,2) : 'no games'}</div>
+      ${r.pos==='TE' ? html`<p class="note" style=${{marginTop:6}}>For tight ends the formula reads ${TEP0} less per catch than you score, because its TE values already include a +${TEP0} premium.</p>` : null}</div></div>
+    <div class="step"><span class="n">2</span><div style=${{minWidth:0}}><div class="t">Pulled toward replacement</div>
+      ${st.rookie ? html`<p class="sub">No NFL games yet, so the starting point comes from draft slot: ${r.dp?'pick '+r.dp:'unknown'} → ${fmt(st.shrunk,2)} PPG, against a ${r.pos} replacement level of ${fmt(st.R,2)}.${st.bench ? ` He hasn't taken a snap this far into the season, so that's marked down ${fmt(100*st.bench,0)}%: someone is ahead of him.` : ''}${r.dp && r.dp<=64 ? ' An early pick with no snaps still has the widest range of outcomes, which keeps some upside in his value.' : ''}</p>`
+       : html`<p class="sub">His record gets ${fmt(c.shr,0)} phantom games at ${fmt(st.target,2)} PPG, which is what a ${r.pos} ${r.dp && r.ageNow<26 ? 'drafted at pick '+r.dp : 'like him'} usually scores (replacement here is ${fmt(st.R,2)}). A short or flukey record can't carry a player; a long one outweighs the phantom games.</p>
+        <div class="eq">(${fmt(r.w.num,0)} + ${fmt(c.shr,0)} × ${fmt(st.target,2)}) ÷ (${fmt(r.w.den,1)} + ${fmt(c.shr,0)}) = ${fmt(st.shrunk,2)}</div>`}</div></div>
+    ${st.prior!=null && st.lam>0.005 ? html`<div class="step"><span class="n">3</span><div style=${{minWidth:0}}><div class="t">Draft capital</div>
+      <p class="sub">Until about two full seasons of games, draft slot also blends into his PPG, fading as he plays. Pick ${r.dp} implies ${fmt(st.prior,2)} PPG, given ${fmt(100*st.lam,0)}% weight.</p>
+      <div class="eq">${fmt(1-st.lam,2)} × ${fmt(st.shrunk,2)} + ${fmt(st.lam,2)} × ${fmt(st.prior,2)} = ${fmt(st.ppg,2)} PPG</div></div></div>` : null}
+    <div class="step"><span class="n">${st.prior!=null && st.lam>0.005?4:3}</span><div style=${{minWidth:0}}><div class="t">Career, year by year</div>
+      <p class="sub">Each future season counts what he scores above replacement, plus the upside of his good outcomes, times the chance he's still a fantasy ${r.pos} at that age${c.d<1?', discounted '+fmt(100*(1-c.d),0)+'% a year':''}.</p>
+      <p class="note" style=${{marginTop:6}}>The curve is in the Profile section above.</p>
+      ${st.inj ? html`<p class="sub" style=${{marginTop:8}}>Currently ${r.inj}: value marked down ${fmt(100*st.inj,0)}%.</p>` : null}
+      ${st.miss && st.ovr ? html`<p class="sub" style=${{marginTop:8}}>Injury news: out about ${fmt(st.miss,0)} more games${st.ovr.note?' ('+st.ovr.note+')':''}, so value is marked down ${fmt(100*(1-st.missF),1)}%. A few missed games barely touch a dynasty value.</p>` : null}
+      ${st.miss && !st.ovr ? html`<p class="sub" style=${{marginTop:8}}>Injury report: ${r.rep.s==='DNP'?'missed practice':r.rep.s}${r.rep.what?' ('+r.rep.what.toLowerCase()+')':''}${r.rep.out>1?', out '+r.rep.out+' straight weeks':''}. Expected to miss about ${fmt(st.miss,1)} more games, so value is marked down ${fmt(100*(1-st.missF),1)}%. Short injuries barely touch a dynasty value.</p>` : null}
+      ${r.modeF && Math.abs(r.modeF-1)>0.005 ? html`<p class="sub" style=${{marginTop:8}}>${MODES[M.cfg.mode].label}: with your seasons weighted, his career counts ${fmt(st.tilt,2)}× on average, against ${fmt(st.tilt/r.modeF,2)}× for a typical top-40 ${r.pos}. So he moves ×${fmt(r.modeF,2)} against his position.</p>` : null}
+      <div class="eq">value = ${fmt(st.value,1)}${r.modeF && Math.abs(r.modeF-1)>0.005 ? ' × '+fmt(r.modeF,2)+' = '+fmt(st.value*r.modeF,1) : ''}${r.adj ? ` → ${r.adj>0?'+':''}${r.adj}% owner adjustment → ${fmt(r.v,1)}` : ''}</div></div></div>
+    </div>
+    ${canEdit ? html`<div class="sec"><span class="eyebrow">Owner tools</span>
+    <${InjOverride} r=${r} onSave=${onInj}/>
+    <div class="step"><span class="n">✎</span><div><div class="t">Owner adjustment</div>
+      <p class="sub">Nudge a player the numbers can't see yet. Everyone sees the adjusted value, flagged.</p>
+      <div class="controls"><${Seg} label="Adjustment" value=${adj} onChange=${setAdj} opts=${[[-30,'−30%'],[-15,'−15%'],[0,'None'],[15,'+15%'],[30,'+30%'],[60,'+60%'],[100,'+100%']]}/>
+      <button class="btn primary" disabled=${adj===(r.adj||0)} onClick=${()=>onAdj(r.k, adj)}>Save</button></div></div></div></div>` : null}
+   </div></div>`;
+}
+
+function Trade({M}){
+  const [sides, setSides] = useState(()=>lsGet('dvb.trade', [[],[]]));
+  const [q, setQ] = useState(['','']);
+  useEffect(()=>lsSet('dvb.trade', sides), [sides]);
+  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The trade calculator opens once the board has players.</span></div>`;
+  const byK = Object.fromEntries([...M.rows, ...(M.picks||[])].map(r=>[r.k, r]));
+  const star = M.cfg.star;
+  const tot = s => s.reduce((a,k)=>a + (byK[k] ? tradeVal(byK[k].v, star) : 0), 0);
+  // a side's total is shown as the one player it's worth: (Σ value^premium)^(1/premium)
+  const T = sides.map(tot), E = T.map(t=>t>0 ? Math.pow(t, 1/star) : 0), mx = Math.max(E[0], E[1]), diff = mx ? Math.abs(E[0]-E[1])/mx : 0;
+  const need = Math.pow(Math.abs(T[0]-T[1]), 1/star);   // one player worth this closes the gap
+  const add = (i,k) => { const s = sides.map(x=>x.slice()); if(!s[i].includes(k)) s[i].push(k); setSides(s); const qq=q.slice(); qq[i]=''; setQ(qq); };
+  const rm = (i,k) => { const s = sides.map(x=>x.filter(y=>y!==k)); setSides(s); };
+  const sugg = i => { const nq = normName(q[i]); if(nq.length<2) return []; return [...M.rows, ...(M.picks||[])].filter(r=>normName(r.n).includes(nq) || (r.pos==='PK' && normName(r.n.replace(/^\\d+ (Pick )?/,'')).startsWith(nq))).slice(0,8); };
+  return html`<div class="panel"><h2>Trade calculator</h2>
+    <p class="sub">Each side's players are added up with a star premium (value<sup>${star}</sup>), so two 200s don't equal one 400. Each side's total is what the package is worth as a single player. Change the premium on the Format tab.</p></div>
+    <div class="tgrid">${[0,1].map(i=>html`<div class="panel side" key=${i}>
+      <div style=${{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><h2>Side ${i?'B':'A'}</h2><span class="mono" style=${{fontWeight:600,fontSize:18}}>${fmt(E[i])}</span></div>
+      ${sides[i].map(k=>byK[k] ? html`<div class="pick" key=${k}><span><${PosTag} p=${byK[k].pos}/> ${byK[k].n}</span><span class="mono">${fmt(byK[k].v)} <button aria-label=${'Remove '+byK[k].n} onClick=${()=>rm(i,k)}>×</button></span></div>` : null)}
+      <input id=${'tq'+i} class="search" type="search" placeholder="Add a player or pick (e.g. 2027 1st, 1.05)" value=${q[i]} onInput=${e=>{ const qq=q.slice(); qq[i]=e.target.value; setQ(qq); }}/>
+      ${sugg(i).length ? html`<div class="sugg">${sugg(i).map(r=>html`<button key=${r.k} onClick=${()=>add(i,r.k)}><span><${PosTag} p=${r.pos}/> ${r.n}</span><span class="mono">${fmt(r.v)}</span></button>`)}</div>` : null}
+    </div>`)}</div>
+    ${!(sides[0].length+sides[1].length) ? html`<div class="panel empty"><b>Build a trade</b><span>Search a player or a pick on each side, like “Nacua” or “2027 1st”. Totals and a fair-or-not verdict appear as you add.</span></div>` : null}
+    ${T[0] && T[1] ? html`<div class=${'verdict '+(diff<0.05?'fair':'off')}>${diff<0.05 ? 'Fair: within 5% either way.' : `Side ${T[0]>T[1]?'A':'B'} gets ${fmt(100*diff,0)}% more value. Side ${T[0]>T[1]?'B':'A'} needs to add about a ${fmt(need)} player to even it.`}</div>` : null}
+    ${sides[0].length+sides[1].length ? html`<div><button class="btn" onClick=${()=>setSides([[],[]])}>Clear both sides</button></div>` : null}`;
+}
+
+function FormatView({cfg, setCfg, def, canEdit, onSaveDef, hasFd}){
+  const set = (k,v) => setCfg({...cfg, [k]:v});
+  const qbMode = cfg.qb>=2 ? '2qb' : cfg.sf ? 'sf' : '1qb';
+  const F_ = ({label, hint, children}) => html`<div class="fld"><label>${label}${hint?html`<span class="hint">${hint}</span>`:null}</label>${children}</div>`;
+  return html`<div class="panel"><h2>Your league format</h2><p class="sub">Values recalculate as you change these. Your choices stay on this device.</p>
+      <h3>Quick start</h3><div class="presets">${Object.keys(PRESETS).map(n=>html`<button class="btn" key=${n} onClick=${()=>setCfg({...cfg, ...PRESETS[n]})}>${n}</button>`)}</div></div>
+    <div class="panel fgrid"><h2>Roster</h2>
+      <${F_} label="Teams"><${Seg} label="Teams" value=${cfg.teams} onChange=${v=>set('teams',v)} opts=${[[8,'8'],[10,'10'],[12,'12'],[14,'14'],[16,'16']]}/></${F_}>
+      <${F_} label="Quarterbacks" hint="Superflex lets a QB fill one extra slot."><${Seg} label="Quarterbacks" value=${qbMode} onChange=${v=>setCfg({...cfg, qb:v==='2qb'?2:1, sf:v==='sf'?1:0})} opts=${[['1qb','1QB'],['sf','Superflex'],['2qb','2QB']]}/></${F_}>
+      <${F_} label="Running backs"><${Seg} label="Running backs" value=${cfg.rb} onChange=${v=>set('rb',v)} opts=${[[1,'1'],[2,'2'],[3,'3']]}/></${F_}>
+      <${F_} label="Wide receivers"><${Seg} label="Wide receivers" value=${cfg.wr} onChange=${v=>set('wr',v)} opts=${[[2,'2'],[3,'3'],[4,'4']]}/></${F_}>
+      <${F_} label="Tight ends"><${Seg} label="Tight ends" value=${cfg.te} onChange=${v=>set('te',v)} opts=${[[1,'1'],[2,'2']]}/></${F_}>
+      <${F_} label="Flex (RB/WR/TE)"><${Seg} label="Flex" value=${cfg.flex} onChange=${v=>set('flex',v)} opts=${[[0,'0'],[1,'1'],[2,'2'],[3,'3']]}/></${F_}>
+    </div>
+    <div class="panel fgrid"><h2>Scoring</h2>
+      <${F_} label="Per reception"><${Seg} label="Per reception" value=${cfg.ppr} onChange=${v=>set('ppr',v)} opts=${[[0,'0'],[0.5,'0.5'],[1,'1']]}/></${F_}>
+      <${F_} label="TE premium" hint="Extra per TE catch."><${Seg} label="TE premium" value=${cfg.tep} onChange=${v=>set('tep',v)} opts=${[[0,'0'],[0.25,'.25'],[0.5,'.5'],[0.75,'.75'],[1,'1']]}/></${F_}>
+      <${F_} label="Passing TD"><${Seg} label="Passing TD" value=${cfg.ptd} onChange=${v=>set('ptd',v)} opts=${[[4,'4'],[5,'5'],[6,'6']]}/></${F_}>
+      <${F_} label="Passing yards per point"><${Seg} label="Passing yards per point" value=${cfg.pyd} onChange=${v=>set('pyd',v)} opts=${[[20,'20'],[25,'25']]}/></${F_}>
+      <${F_} label="Interception"><${Seg} label="Interception" value=${cfg.int} onChange=${v=>set('int',v)} opts=${[[-1,'−1'],[-2,'−2']]}/></${F_}>
+      <${F_} label="Fumble lost"><${Seg} label="Fumble lost" value=${cfg.fl} onChange=${v=>set('fl',v)} opts=${[[-1,'−1'],[-2,'−2']]}/></${F_}>
+      ${hasFd ? html`<${F_} label="First downs" hint="Rushing and receiving."><${Seg} label="First downs" value=${cfg.fd} onChange=${v=>set('fd',v)} opts=${[[0,'0'],[0.5,'0.5'],[1,'1']]}/></${F_}>` : null}
+    </div>
+    <div class="panel fgrid"><h2>League type</h2>
+      <${F_} label="Dynasty or redraft" hint="Redraft values only the rest of this season: points above a replacement starter, times games left."><${Seg} label="League type" value=${cfg.league||'dynasty'} onChange=${v=>set('league',v)} opts=${[['dynasty','Dynasty'],['redraft','Redraft']]}/></${F_}>
+    </div>
+    <div class="panel fgrid"><h2>Team direction</h2>
+      <${F_} label="Where your team is" hint="Win now favours players who produce this season and next; rebuild favours young players and picks whose value lands two or more years out. Neutral weighs every season the same."><${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>set('mode',v)} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/></${F_}>
+    </div>
+    <div class="panel fgrid"><h2>Model dials</h2>
+      <${F_} label="Draft capital weight" hint="Raise to trust draft slot more for young players with thin production."><${Seg} label="Draft capital weight" value=${cfg.dcw} onChange=${v=>set('dcw',v)} opts=${[[1,'1×'],[1.5,'1.5×'],[2,'2×'],[3,'3×']]}/></${F_}>
+      <${F_} label="Athleticism" hint="Combine athleticism nudges draft slot for young players, only as much as it has predicted fantasy output beyond draft slot: TEs most, RBs and QBs a little, WRs not at all."><${Seg} label="Athleticism" value=${cfg.athw!=null?cfg.athw:1} onChange=${v=>set('athw',v)} opts=${[[0,'Off'],[1,'Data-backed'],[2,'Double']]}/></${F_}>
+      <${F_} label="Upside" hint="How much an uncertain future is worth. High lifts young players, short track records and players near replacement, who have the most room to boom; proven stars barely move. Low trusts the averages."><${Seg} label="Upside" value=${cfg.upside} onChange=${v=>set('upside',v)} opts=${[[0.75,'Low'],[1,'Normal'],[1.5,'High']]}/></${F_}>
+      <${F_} label="Star premium" hint="Trade calculator only."><${Seg} label="Star premium" value=${cfg.star} onChange=${v=>set('star',v)} opts=${[[1,'None'],[1.15,'Some'],[1.3,'Strong']]}/></${F_}>
+    </div>
+    <div class="controls"><button class="btn" onClick=${()=>setCfg({...def})}>Reset to the board default</button>
+      ${canEdit ? html`<button class="btn primary" onClick=${()=>onSaveDef(cfg)}>Make this the default for everyone</button>` : null}</div>`;
+}
+
+function Method({M, meta}){
+  const R = M ? M.R : null;
+  return html`<div class="panel"><h2>How a value is built</h2>
+      <p>Every number on this board comes from one formula run over each player's real game logs. Nothing is copied from another site's rankings.</p>
+      <h3>1. Production, scored your way</h3>
+      <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight.</p>
+      <h3>2. Pulled toward replacement</h3>
+      <p class="sub">A player's average gets blended with phantom games at the level a player like him usually reaches: near replacement for an early first-round pick, well below it for a late-round or undrafted player. A hot few weeks can't vault a backup past a proven starter, and a backup with one start can't coast on being young. QBs get the most phantom games (see the table) because one QB season says the least about the next.</p>
+      <h3>3. Draft capital for young players</h3>
+      <p class="sub">Draft slot sets where a thin record gets pulled to. It fades out as a player racks up games (gone after about two full seasons) and by age 26, so a bust first-rounder stops coasting on pedigree and a late-round breakout isn't held back by it. Rookies with no games start from draft slot alone. Once a season is underway, a rookie who still hasn't taken a snap is marked down (up to 20% by week 8), because someone is ahead of him; an early-round pick keeps a wide range of outcomes, so some upside survives.</p>
+      <h3>Injuries</h3>
+      <p class="sub">IR, PUP and suspensions mark a player down by his position's injury cost. Shorter injuries come from the weekly injury report, injury news ("out 4–6 weeks") is checked automatically twice a week for hurt players who matter, and the owner can overrule it; either way it counts down a game a week: Out counts as about one more missed game plus three-quarters of a game for each straight week he's already been out; Doubtful 0.8, Questionable 0.25, a missed practice 0.3, and concussions add half a game. In dynasty that's a small markdown (games lost out of a season); in redraft those games come straight off the games he has left.</p>
+      <h3>Athleticism</h3>
+      <p class="sub">A combine composite (size-adjusted speed counts double, then vertical, broad jump, 3-cone and shuttle, against players at the same position) nudges a young player's draft slot. It only counts where it has predicted fantasy points beyond draft slot: tested on the 2017–23 draft classes, it clearly helps at TE, a little at RB and QB, and not at WR. It fades out with draft slot as a player builds a record, and players who skipped drills are treated as average.</p>
+      <h3>4. A career, not a season</h3>
+      <p class="sub">The value adds up every future season: points above replacement, plus the worth of his upside outcomes, times the chance he's still a fantasy starter at that age. That chance falls off around age 30 for RBs, 33 for TEs, 36 for WRs and 39 for QBs. QB and RB years further out are discounted the most.</p>
+      <h3>5. Your format sets replacement</h3>
+      <p class="sub">Replacement level comes from your lineup: in a deeper league, or superflex for QBs, the replacement player is worse, so starters are worth more.</p>
+      ${R ? html`<div class="tscroll"><table><thead><tr><th>Position</th><th>Starters</th><th>Replacement PPG</th><th>Fades by</th><th>Phantom games</th></tr></thead><tbody>
+        ${POS.map(q=>html`<tr key=${q}><td><${PosTag} p=${q}/></td><td>${M.N[q]}</td><td>${fmt(R[q],1)}</td><td>${fmt(PV[q].mid,0)}</td><td>${fmt(PV[q].shr,0)}</td></tr>`)}</tbody></table></div>` : null}
+      <h3>Big changes</h3>
+      <p class="sub">The numbers can't see a trade or a new depth chart coming, so two things cover it. A player who changes teams (trade, signing or release) is flagged automatically: his old numbers count 25% less and his range of outcomes widens until he builds a record in the new offense. And an outlook (much worse, worse, better, much better) moves his expected scoring by 9 or 18%; dynasty uses 60% of that, since situations change again. Outlooks are set by the twice-weekly news check for players who changed teams or lost a key teammate for the season, and the board's owner can set or overrule any of them.</p>
+      <h3>Redraft</h3>
+      <p class="sub">Switching to redraft swaps the career math for this season only: this season's PPG (plus up to six games of last season at half weight, plus four phantom games just under replacement), minus a replacement starter in your lineup, times games left in the fantasy regular season. Injured players count 40% of their remaining games.</p>
+      <h3>Team direction</h3>
+      <p class="sub">Win now weights this season 1.6×, next season 1.2×, and later seasons less each year; rebuild weights this season 0.35×, next 0.9× and every season after 1.15×. A player moves up or down against the typical top-40 player at his position, so a 31-year-old RB climbs in win-now and slides in rebuild while positions stay comparable. Win now also trims what upside is worth and makes future picks feel further away; rebuild does the opposite.</p>
+      <h3>Tiers</h3>
+      <p class="sub">Tiers are cut where values naturally clump. The top 240 players (top 80 at a position) are split so players inside a tier are as close in value as possible, with the number of tiers set by the size of the list. Elite tiers come out small because values are spread out at the top; lower tiers hold more players because values bunch together. Everyone below is listed as depth.</p>
+      <h3>Expert consensus</h3>
+      <p class="sub">ECR is FantasyPros' dynasty expert consensus (via DynastyProcess), refreshed weekly with the stats. It sits next to each player so you can see where your board disagrees; it never feeds into a value.</p>
+      <h3>The formula</h3>
+      <div class="eq">PPG = (Σ w·pts + n·R) ÷ (Σ w·games + n)</div>
+      <div class="eq">value = k × Σ<sub>years</sub> dʲ × alive(age) × [ (PPG − R)·Φ(z) + σ·φ(z) ],  z = (PPG − R) ÷ σ</div>
+      <p class="sub" style=${{marginTop:8}}>Φ and φ are the normal curve; σ is uncertainty, larger for young players. Injured players (IR or out) are marked down by position. The shape was fitted position by position on three seasons of real stats against a blend of two outside boards (PlayerProfiler and FantasyPros expert consensus), inside football guard rails: QBs fade around 35–40, RBs 27–31, WRs and TEs 31–35, no position is discounted more than 20% a year, and QBs' records are trusted most because QB production carries over best year to year. Values land on the familiar 0–500 dynasty scale; your board still disagrees with the experts plenty.</p>
+    </div>
+    <div class="panel"><h2>Data</h2>
+      <div class="kv"><span>Players on the board</span><span class="mono">${M ? M.rows.length : '–'}</span></div>
+      <div class="kv"><span>Seasons used</span><span class="mono">${M ? `${M.season-2}–${M.season}` : '–'}</span></div>
+      <div class="kv"><span>Games into ${meta&&meta.season||'this season'}</span><span class="mono">${meta && meta.games ? meta.games : '–'}</span></div>
+      <div class="kv"><span>Stats last pulled</span><span class="mono">${meta && meta.at ? new Date(meta.at).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : '–'}</span></div>
+      <p class="note" style=${{marginTop:8}}>Stats, ages and draft slots come from nflverse, the free public NFL data project (CC-BY). They're pulled every Tuesday morning, after Monday night's game, so the board stays current without anyone opening it.</p>
+    </div>`;
+}
+
+/* ---------- app ---------- */
+const VIEWS = ['home','board','trade','format','method'];
+const ico = d => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const TABS = [
+  ['home','Home', ico(html`<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>`)],
+  ['board','Rankings', ico(html`<path d="M4 6h16M4 12h16M4 18h10"/>`)],
+  ['trade','Trade', ico(html`<path d="M7 7h12l-3-3M17 17H5l3 3"/>`)],
+  ['format','Format', ico(html`<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>`)],
+  ['method','Method', ico(html`<path d="M5 4h14v16H5z"/><path d="M9 8h6M9 12h6M9 16h4"/>`)] ];
+function App(){
+  const [D, setD] = useState({});
+  const [loaded, setLoaded] = useState(false);
+  const [view, setView] = useState(()=>{ const h = (location.hash||'').slice(1); return VIEWS.includes(h) ? h : 'home'; });
+  const [cfgL, setCfgL] = useState(()=>lsGet('dvb.cfg', null));
+  const [open, setOpen] = useState(null);
+  const [mine, setMine] = useState(()=>new Set(lsGet('dvb.mine', [])));
+  const toggleMine = k => { const s = new Set(mine); s.has(k) ? s.delete(k) : s.add(k); setMine(s); lsSet('dvb.mine', [...s]); };
+  const [canEdit, setCanEdit] = useState(false);
+  const [status, setStatus] = useState({busy:false, done:0, total:0, err:null});
+  const dbRef = useRef(null);
+  const [now] = useState(Date.now());
+
+  useEffect(()=>{ const f=()=>{ const h=(location.hash||'').slice(1); if(VIEWS.includes(h)) setView(h); }; window.addEventListener('hashchange', f); return ()=>window.removeEventListener('hashchange', f); }, []);
+  const go = v => { setView(v); try{ history.replaceState(null, '', '#'+v); }catch(e){} window.scrollTo(0,0); };
+
+  useEffect(()=>{ let unsubs = [], alive = true;
+    const t = setTimeout(()=>{ if(alive) setLoaded(true); }, 10000);
+    (async()=>{
+      const db = window.claude ? await window.claude.use('db') : null;
+      if(!db){   // public website: read the published snapshot (data.json) instead of the live board's storage
+        try{
+          const r = await fetch('data.json', {cache:'no-store'}); if(!r.ok) throw new Error('no data');
+          const d = await r.json(), o = {};
+          ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{ o[k] = d[k]||null; o['_'+k] = true; });
+          setD(o);
+        }catch(e){ setStatus(s=>({...s, err:'Sign in to claude.ai to see the board.'})); }
+        setLoaded(true); return; }
+      dbRef.current = db;
+      ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{
+        unsubs.push(db.doc('board/'+k).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; setD(o=>({...o, [k]:d, ['_'+k]:true})); }, ()=>{}));
+      });
+      try{ const u = await window.claude.use('user'); if(u && await u.canEdit()) setCanEdit(true); }catch(e){}
+    })();
+    return ()=>{ alive=false; clearTimeout(t); unsubs.forEach(u=>{ try{u();}catch(e){} }); };
+  }, []);
+  const ready = ['meta','adj','defaults','classes','injuries','outlook',...POS].every(k=>D['_'+k]);
+  useEffect(()=>{ if(ready) setLoaded(true); }, [ready]);
+
+  const def = {...DEF, ...((D.defaults&&D.defaults.cfg)||{})};
+  const cfg = {...def, ...(cfgL||{})};
+  const setCfg = c => { setCfgL(c); lsSet('dvb.cfg', c); };
+
+  const players = useMemo(()=>{
+    const out = [];
+    const OV = (D.injuries&&D.injuries.rows)||{}, OL = (D.outlook&&D.outlook.rows)||{};
+    POS.forEach(q=>Object.entries((D[q]&&D[q].rows)||{}).forEach(([k,e])=>{
+      if(e.nf || !e.s || e.age==null) return;
+      out.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null});
+    }));
+    return out;
+  }, [D.QB, D.RB, D.WR, D.TE, D.injuries, D.outlook]);
+  const M = useMemo(()=>{
+    if(!players.length) return null;
+    const adj = (D.adj&&D.adj.rows)||{}, cls = (D.classes&&D.classes.years)||{}, m = rankAll(players, {...cfg, __class:cls, __ecrAt:(D.meta&&D.meta.ecrAt)||null}, now, adj);
+    const w30 = D.meta && D.meta.w30;
+    if(w30){   // the same board as of ~30 days ago: this season's stats through week w30, everyone 30 days younger
+      const S = String(m.season), then = now - 30*864e5;
+      const past = players.map(p=> p.s30===undefined ? p : {...p, s:{...p.s, [S]:p.s30}});
+      const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left}, then, adj), by = {};
+      m0.rows.forEach(r=>by[r.k]=r);
+      m.rows.forEach(r=>{ const o = by[r.k]; if(o){ r.d30 = r.v - o.v; r.r30Overall = o.rank; } else if(r.s30!==undefined) r.d30 = r.v; });
+      m.w30 = w30;
+    }
+    return m;
+  }, [players, JSON.stringify(cfg), D.adj, D.meta, D.classes]);
+
+  const saveAdj = async (k, v) => { const db = dbRef.current; if(!db) return; const rows = {...((D.adj&&D.adj.rows)||{})}; if(v) rows[k]=v; else delete rows[k]; await db.doc('board/adj').set({rows}); setOpen(null); };
+  const saveInj = async (k, g, note) => { const db = dbRef.current; if(!db) return; const rows = {...((D.injuries&&D.injuries.rows)||{})}; if(g) rows[k] = {games:g, at:Date.now(), note, auto:false}; else delete rows[k]; await db.doc('board/injuries').set({rows}); };
+  const saveOut = async (k, f, note) => { const db = dbRef.current; if(!db) return; const rows = {...((D.outlook&&D.outlook.rows)||{})}; if(f) rows[k] = {f, note, at:Date.now(), auto:false}; else delete rows[k]; await db.doc('board/outlook').set({rows}); };
+  const saveClass = async (y, v) => { const db = dbRef.current; if(!db) return; const cl = D.classes || {}; await db.doc('board/classes').set({...cl, years:{...(cl.years||{}), [y]:v}}); };
+  const saveDef = async c => { const db = dbRef.current; if(!db) return; await db.doc('board/defaults').set({cfg:{...c}}); setCfgL(null); lsSet('dvb.cfg', null); };
+
+  const st = D.meta && D.meta.at ? html`<span class="chip"><span class="dot"></span>${ago(D.meta.at)}</span>` : null;
+  const openRow = open && M ? M.rows.find(r=>r.k===open) : null;
+  return html`<header class="top"><div class="wrap">
+      <div class="brand grow"><span class="mark" aria-hidden="true">DV</span><div style=${{minWidth:0}}><b>Dynasty Value Board</b><small>${fmtSummary(cfg)}</small></div></div>
+      <nav class="dtabs" aria-label="Sections">${TABS.map(([v,l])=>html`<button key=${v} aria-current=${view===v?'page':null} onClick=${()=>go(v)}>${l}</button>`)}</nav>
+      ${st}</div></header>
+    <main class="wrap">
+      ${!loaded ? html`<div class="panel empty"><b>Loading the board</b><span>Fetching the latest values.</span></div>`
+        : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
+        : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine}/>`
+        : view==='trade' ? html`<${Trade} M=${M}/>`
+        : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
+        : html`<${Method} M=${M} meta=${D.meta}/>`}
+    </main>
+    <nav class="tabs" aria-label="Sections"><div class="wrap">${TABS.map(([v,l,ic])=>html`<button key=${v} aria-current=${view===v?'page':null} onClick=${()=>go(v)}>${ic}<span>${l}</span></button>`)}</div></nav>
+    ${openRow ? html`<${Sheet} r=${openRow} M=${M} canEdit=${canEdit} onAdj=${saveAdj} onInj=${saveInj} onOut=${saveOut} starred=${mine.has(openRow.k)} onStar=${toggleMine} onClose=${()=>setOpen(null)}/>` : null}`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+window.__dvb = {rankAll};
+
+</script>
+</body></html>
