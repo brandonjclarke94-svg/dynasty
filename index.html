@@ -311,7 +311,11 @@ function expMiss(rep){ if(!rep) return 0; let m = rep.s==='Out' ? Math.min(6, 1 
 // Athleticism (combine composite, in SDs) nudges draft slot, and only where it has predicted fantasy output beyond draft slot.
 // Tested on 2017-23 draft classes (points in years 2-3): TEs clearly (t 2.4), RBs and QBs a little (t ~1, so shrunk hard), WRs not at all.
 // One SD of athleticism counts like being drafted this many times earlier (exp(beta)): TE ~1.4x, RB ~1.05x, QB ~1.03x, WR 1x.
-const ATH = {QB:0.03, RB:0.05, WR:0, TE:0.34};   // shrunk hard toward zero (a skeptical prior), so it only nudges
+const ATH = {QB:0.03, RB:0.05, WR:0, TE:0.34};
+// Depth chart. A young player behind a strong incumbent (same team and position, drafted before him) gets less work early.
+// On 2008-23 draft classes, one SD stronger incumbent cost about what being drafted 1.1-1.25x later costs over his first
+// three seasons (RB clearest, t 1.9; WR/TE t 1.4; QB t 0.8). Shrunk toward zero like athleticism, so it nudges, not decides.
+const COMPB = {QB:0.06, RB:0.165, WR:0.08, TE:0.085};   // shrunk hard toward zero (a skeptical prior), so it only nudges
 const BENCH = 0.2;
 const ROOKSD = {QB:3, RB:1, WR:1, TE:1};   // QBs with no snaps carry a much wider range of outcomes than the fitted QB spread
 const GF = 2;   // seasons of games until draft slot stops counting
@@ -422,7 +426,8 @@ function rankAll(players, cfgIn, now, adj){
     if(r.ageNow==null) return;
     if(!r.w.den && !r.dp) return;                     // no games and no draft capital: nothing to value
     const az = r.ath!=null ? Math.max(-2, Math.min(2, r.ath)) : 0;
-    const dpE = r.dp ? Math.max(1, r.dp*Math.exp(-ATH[r.pos]*az*(c.athw!=null?c.athw:1))) : r.dp;
+    const cz = r.comp ? Math.max(-2, Math.min(2.5, r.comp[0])) : 0;
+    const dpE = r.dp ? Math.max(1, r.dp*Math.exp(-ATH[r.pos]*az*(c.athw!=null?c.athw:1) + COMPB[r.pos]*cz)) : r.dp;
     const wv = r.moved ? {...r.w, num:r.w.num*MOVE_TRUST, den:r.w.den*MOVE_TRUST} : r.w;
     const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(r.moved?MOVE_SPREAD:1), c.dcw, c.mode, bench, outMult(r.out, false));
     if(r.moved) st.moved = r.moved; if(r.out) st.out = r.out;
@@ -800,9 +805,10 @@ function wk1Thu(Y){ const d = new Date(Date.UTC(Y, 8, 1)).getUTCDay(); return Da
 function weekEnd(Y, w){ return wk1Thu(Y) + (5 + 7*(w-1))*DAYMS; }   // the Tuesday after week w's games
 function valueHistory(players, cfg, adj, S, nowT){
   const strip = p => ({...p, inj:null, rep:null, ovr:null, moved:null, out:null, rk:false, s30:undefined});
+  const stripY = p => ({...strip(p), comp:null});
   const pts = [];
   if(cfg.league!=='redraft') [S-3, S-2, S-1].forEach(Y=>{
-    const ps = players.filter(p=>!p.dy || p.dy<=Y).map(p=>{ const s = {}; Object.keys(p.s||{}).forEach(y=>{ if(+y<=Y) s[y] = p.s[y]; }); return {...strip(p), s}; });
+    const ps = players.filter(p=>!p.dy || p.dy<=Y).map(p=>{ const s = {}; Object.keys(p.s||{}).forEach(y=>{ if(+y<=Y) s[y] = p.s[y]; }); return {...stripY(p), s}; });
     pts.push({lab:"End '"+String(Y).slice(2), t:weekEnd(Y, 18), ps, sep:Y===S-1});
   });
   for(let w=1; w<40; w++){
@@ -875,7 +881,9 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
     <p class="note">${fmtSummary(M.cfg)}. ${r.dp ? 'Drafted pick '+r.dp+' overall.' : 'Draft slot unknown.'}${r.ecrRank ? ` Expert consensus #${r.ecrRank} (${r.pos}${r.ecrPos}), for comparison only.` : ''}</p>
     <div class="sec"><span class="eyebrow">Profile</span><div class="charts"><${ValueHistory} r=${r} H=${H}/><${PpgChart} r=${r} M=${M}/><${CareerChart} r=${r}/></div></div>
     <div class="sec"><span class="eyebrow">Situation</span><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/>
-    ${r.ath!=null && r.pos!=='WR' ? html`<p class="sub">Athleticism: ${r.ath>=0?'+':''}${fmt(r.ath,1)} SD vs ${r.pos}s at the combine.${r.dp && st.dpE && Math.abs(st.dpE-r.dp)>=0.5 ? ` While draft slot still counts for him, that plays like pick ${fmt(st.dpE)} instead of ${r.dp}.` : r.pos==='WR' ? ' It isn\'t used for WRs: it hasn\'t predicted WR production beyond draft slot.' : ''}</p>` : null}
+    ${r.ath!=null && r.pos!=='WR' ? html`<p class="sub">Athleticism: ${r.ath>=0?'+':''}${fmt(r.ath,1)} SD vs ${r.pos}s at the combine.</p>` : null}
+    ${r.comp ? html`<p class="sub">Depth chart: ${r.comp[1] ? `the ${r.pos==='WR'?'WR2':r.pos+'1'} he has to beat on ${r.team} is ${r.comp[1]} (${fmt(r.comp[2],1)} PPG)` : `no established ${r.pos} ahead of him on ${r.team}`}, ${r.comp[0]>=0.5?'a crowded room':r.comp[0]<=-0.5?'an open path':'a typical room'} (${r.comp[0]>=0?'+':''}${fmt(r.comp[0],1)} SD).</p>` : null}
+    ${r.dp && st.dpE && Math.abs(st.dpE-r.dp)>=0.5 && (r.ath!=null || r.comp) ? html`<p class="sub">While draft slot still counts for him, ${r.ath!=null && r.pos!=='WR' && r.comp ? 'athleticism and depth chart together make him' : r.comp ? 'the depth chart makes him' : 'that makes him'} play like pick ${fmt(st.dpE)} instead of ${r.dp}.</p>` : null}
     </div>
     <div class="sec"><span class="eyebrow">How the value is built</span>
     <div class="step"><span class="n">1</span><div style=${{minWidth:0}}><div class="t">Production under your scoring</div>
@@ -1076,7 +1084,7 @@ function App(){
     const OV = (D.injuries&&D.injuries.rows)||{}, OL = (D.outlook&&D.outlook.rows)||{};
     POS.forEach(q=>Object.entries((D[q]&&D[q].rows)||{}).forEach(([k,e])=>{
       if(e.nf || !e.s || e.age==null) return;
-      out.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, wk:e.wk||null, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null});
+      out.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, wk:e.wk||null, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, comp:e.comp||null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null});
     }));
     return out;
   }, [D.QB, D.RB, D.WR, D.TE, D.injuries, D.outlook]);
