@@ -580,7 +580,7 @@ function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine}
   const [q, setQ] = useState('');
   const [lim, setLim] = useState(150);
   useEffect(()=>lsSet('dvb.pos', pos), [pos]);
-  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No players yet</b><span>Player stats haven't been loaded yet. They're pulled every Tuesday and Saturday.</span></div>`;
+  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No players yet</b><span>Player stats haven't been loaded yet. They're pulled Monday, Tuesday and Friday evenings, after each slate of games.</span></div>`;
   if(pos==='PK' && red){ setTimeout(()=>setPos('ALL'),0); }
   const posOpts = [['ALL','All'],['QB','QB'],['RB','RB'],['WR','WR'],['TE','TE'], ...(red?[]:[['PK','Picks']]), ['MINE','★ Mine']];
   const modeBar = html`<div class="controls"><${Seg} label="League type" value=${cfg.league||'dynasty'} onChange=${v=>setCfg({...cfg, league:v})} opts=${[['dynasty','Dynasty'],['redraft','Redraft']]}/>${red ? null : html`<${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/>`}</div>`;
@@ -722,7 +722,7 @@ function InjOverride({r, onSave}){
   const [g, setG] = useState(cur), [note, setNote] = useState((r.ovr&&r.ovr.note)||'');
   return html`<div class="step"><span class="n">+</span><div style=${{minWidth:0}}><div class="t">Injury news</div>
     ${r.ovr && r.ovr.auto ? html`<p class="sub">Checked automatically ${new Date(r.ovr.at).toLocaleDateString([], {month:'short', day:'numeric'})}: ${r.ovr.note}${r.ovr.src ? html` · <a href=${r.ovr.src} target="_blank" rel="noopener">source</a>` : null}</p>` : null}
-    <p class="sub">Injury news is checked automatically twice a week for hurt players who matter. To overrule it, set the games he'll miss yourself; your setting is never replaced by the automatic check. It counts down a game each week and clears itself.</p>
+    <p class="sub">Injury news is checked automatically three times a week (Monday, Tuesday and Friday evenings) for hurt players who matter. To overrule it, set the games he'll miss yourself; your setting is never replaced by the automatic check. It counts down a game each week and clears itself.</p>
     <div class="controls"><${Seg} label="Games out" value=${g} onChange=${setG} opts=${[[0,'None'],[1,'1'],[2,'2'],[3,'3'],[4,'4'],[5,'5'],[6,'6'],[8,'8'],[17,'Season']]}/></div>
     <div class="controls" style=${{marginTop:8}}><input id="injnote" class="search" placeholder="Source or note (optional)" value=${note} onInput=${e=>setNote(e.target.value)}/>
     <button class="btn primary" disabled=${g===cur && note===((r.ovr&&r.ovr.note)||'')} onClick=${()=>onSave(r.k, g, note)}>Save</button></div></div></div>`;
@@ -924,7 +924,7 @@ function Method({M, meta}){
       <h3>3. Draft capital for young players</h3>
       <p class="sub">Draft slot sets where a thin record gets pulled to. It fades out as a player racks up games (gone after about two full seasons) and by age 26, so a bust first-rounder stops coasting on pedigree and a late-round breakout isn't held back by it. Rookies with no games start from draft slot alone. Once a season is underway, a rookie who still hasn't taken a snap is marked down (up to 20% by week 8), because someone is ahead of him; an early-round pick keeps a wide range of outcomes, so some upside survives.</p>
       <h3>Injuries</h3>
-      <p class="sub">IR, PUP and suspensions mark a player down by his position's injury cost. Shorter injuries come from the weekly injury report, injury news ("out 4–6 weeks") is checked automatically twice a week for hurt players who matter, and the owner can overrule it; either way it counts down a game a week: Out counts as about one more missed game plus three-quarters of a game for each straight week he's already been out; Doubtful 0.8, Questionable 0.25, a missed practice 0.3, and concussions add half a game. In dynasty that's a small markdown (games lost out of a season); in redraft those games come straight off the games he has left.</p>
+      <p class="sub">IR, PUP and suspensions mark a player down by his position's injury cost. Shorter injuries come from the weekly injury report, injury news ("out 4–6 weeks") is checked automatically after every slate of games for hurt players who matter, and the owner can overrule it; either way it counts down a game a week: Out counts as about one more missed game plus three-quarters of a game for each straight week he's already been out; Doubtful 0.8, Questionable 0.25, a missed practice 0.3, and concussions add half a game. In dynasty that's a small markdown (games lost out of a season); in redraft those games come straight off the games he has left.</p>
       <h3>Athleticism</h3>
       <p class="sub">A combine composite (size-adjusted speed counts double, then vertical, broad jump, 3-cone and shuttle, against players at the same position) nudges a young player's draft slot. It only counts where it has predicted fantasy points beyond draft slot: tested on the 2017–23 draft classes, it clearly helps at TE, a little at RB and QB, and not at WR. It fades out with draft slot as a player builds a record, and players who skipped drills are treated as average.</p>
       <h3>4. A career, not a season</h3>
@@ -934,7 +934,7 @@ function Method({M, meta}){
       ${R ? html`<div class="tscroll"><table><thead><tr><th>Position</th><th>Starters</th><th>Replacement PPG</th><th>Fades by</th><th>Phantom games</th></tr></thead><tbody>
         ${POS.map(q=>html`<tr key=${q}><td><${PosTag} p=${q}/></td><td>${M.N[q]}</td><td>${fmt(R[q],1)}</td><td>${fmt(PV[q].mid,0)}</td><td>${fmt(PV[q].shr,0)}</td></tr>`)}</tbody></table></div>` : null}
       <h3>Big changes</h3>
-      <p class="sub">The numbers can't see a trade or a new depth chart coming, so two things cover it. A player who changes teams (trade, signing or release) is flagged automatically: his old numbers count 25% less and his range of outcomes widens until he builds a record in the new offense. And an outlook (much worse, worse, better, much better) moves his expected scoring by 9 or 18%; dynasty uses 60% of that, since situations change again. Outlooks are set by the twice-weekly news check for players who changed teams or lost a key teammate for the season, and the board's owner can set or overrule any of them.</p>
+      <p class="sub">The numbers can't see a trade or a new depth chart coming, so two things cover it. A player who changes teams (trade, signing or release) is flagged automatically: his old numbers count 25% less and his range of outcomes widens until he builds a record in the new offense. And an outlook (much worse, worse, better, much better) moves his expected scoring by 9 or 18%; dynasty uses 60% of that, since situations change again. Outlooks are set by the news check after each slate of games for players who changed teams or lost a key teammate for the season, and the board's owner can set or overrule any of them.</p>
       <h3>Redraft</h3>
       <p class="sub">Switching to redraft swaps the career math for this season only: this season's PPG (plus up to six games of last season at half weight, plus four phantom games just under replacement), minus a replacement starter in your lineup, times games left in the fantasy regular season. Injured players count 40% of their remaining games.</p>
       <h3>Team direction</h3>
@@ -953,7 +953,7 @@ function Method({M, meta}){
       <div class="kv"><span>Seasons used</span><span class="mono">${M ? `${M.season-2}–${M.season}` : '–'}</span></div>
       <div class="kv"><span>Games into ${meta&&meta.season||'this season'}</span><span class="mono">${meta && meta.games ? meta.games : '–'}</span></div>
       <div class="kv"><span>Stats last pulled</span><span class="mono">${meta && meta.at ? new Date(meta.at).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : '–'}</span></div>
-      <p class="note" style=${{marginTop:8}}>Stats, ages and draft slots come from nflverse, the free public NFL data project (CC-BY). They're pulled every Tuesday morning, after Monday night's game, so the board stays current without anyone opening it.</p>
+      <p class="note" style=${{marginTop:8}}>Stats, ages and draft slots come from nflverse, the free public NFL data project (CC-BY). They're pulled Monday, Tuesday and Friday evenings (after Sunday, Monday night and Thursday night games, and Friday's final injury report), so the board stays current without anyone opening it.</p>
     </div>`;
 }
 
