@@ -315,7 +315,15 @@ const ATH = {QB:0.03, RB:0.05, WR:0, TE:0.34};
 // Depth chart. A young player behind a strong incumbent (same team and position, drafted before him) gets less work early.
 // On 2008-23 draft classes, one SD stronger incumbent cost about what being drafted 1.1-1.25x later costs over his first
 // three seasons (RB clearest, t 1.9; WR/TE t 1.4; QB t 0.8). Shrunk toward zero like athleticism, so it nudges, not decides.
-const COMPB = {QB:0.06, RB:0.165, WR:0.08, TE:0.085};   // shrunk hard toward zero (a skeptical prior), so it only nudges
+const COMPB = {QB:0.06, RB:0.165, WR:0.08, TE:0.085};
+// Offense strength. The betting market's implied points for a player's team (next four games, vs league average) moves his
+// expected scoring: on 2010-24 data, a 10% better offense meant ~4% more for skill players and ~7% for QBs the next season.
+// Dynasty uses 2% per 10% for every position (backtested best: offenses regress, players move, and QBs' values are leveraged);
+// redraft uses the measured in-season effect. A player who is out is skipped: his team's lines already reflect his absence.
+const ENVB = {dyn:{QB:0.2, RB:0.2, WR:0.2, TE:0.2}, red:{QB:0.66, RB:0.27, WR:0.27, TE:0.27}};
+const envF = (c, team, pos, redraft, r, now) => { const e = c.__env && team ? c.__env[team] : null; if(e==null) return 1;
+  if(r && (r.inj || ovrLeft(r.ovr, now||Date.now())>0 || (r.rep && /Out|Doubtful/.test(r.rep.s||'')))) return 1;
+  return 1 + Math.max(-0.12, Math.min(0.12, (redraft?ENVB.red:ENVB.dyn)[pos]*e)); };   // shrunk hard toward zero (a skeptical prior), so it only nudges
 const BENCH = 0.2;
 const ROOKSD = {QB:3, RB:1, WR:1, TE:1};   // QBs with no snaps carry a much wider range of outcomes than the fitted QB spread
 const GF = 2;   // seasons of games until draft slot stops counting
@@ -429,7 +437,9 @@ function rankAll(players, cfgIn, now, adj){
     const cz = r.comp ? Math.max(-2, Math.min(2.5, r.comp[0])) : 0;
     const dpE = r.dp ? Math.max(1, r.dp*Math.exp(-ATH[r.pos]*az*(c.athw!=null?c.athw:1) + COMPB[r.pos]*cz)) : r.dp;
     const wv = r.moved ? {...r.w, num:r.w.num*MOVE_TRUST, den:r.w.den*MOVE_TRUST} : r.w;
-    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(r.moved?MOVE_SPREAD:1), c.dcw, c.mode, bench, outMult(r.out, false));
+    const ef = envF(c, r.team, r.pos, false, r, now);
+    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(r.moved?MOVE_SPREAD:1), c.dcw, c.mode, bench, outMult(r.out, false)*ef);
+    if(ef!==1) st.env = {f:ef, e:c.__env[r.team]};
     if(r.moved) st.moved = r.moved; if(r.out) st.out = r.out;
     st.dpE = dpE;
     const ov = ovrLeft(r.ovr, now), miss = r.inj && !ov ? 0 : Math.max(ov, r.inj ? 0 : expMiss(r.rep));
@@ -476,7 +486,7 @@ function redraftAll(rows, c, S, gS, nowR){
     if(!l1 && !(l2 && r.ageNow!=null)) return;
     const g1 = l1 ? l1.g : 0, w2 = l2 ? 0.5*Math.min(l2.g, 6) : 0;
     const tr = r.moved ? MOVE_TRUST : 1;   // new team: his old numbers count a bit less
-    const ppg0 = (tr*g1*(l1?l1.ppg:0) + tr*w2*(l2?l2.ppg:0) + 4*R[r.pos]*0.9) / (tr*g1 + tr*w2 + 4), om = outMult(r.out, true), ppg = ppg0*om;
+    const ppg0 = (tr*g1*(l1?l1.ppg:0) + tr*w2*(l2?l2.ppg:0) + 4*R[r.pos]*0.9) / (tr*g1 + tr*w2 + 4), ef = envF(c, r.team, r.pos, true, r, nowR), om = outMult(r.out, true)*ef, ppg = ppg0*om;
     const ov = ovrLeft(r.ovr, nowR), miss = Math.max(ov, r.inj ? 0 : expMiss(r.rep)), gl = ov ? Math.max(0, left - ov) : r.inj ? left*0.4 : Math.max(0, left - miss);
     const base = Math.max(0, ppg - R[r.pos]) * gl;
     out.push({...r, st:{redraft:true, ppg, preOut:ppg0, om, moved:r.moved, out:r.out, R:R[r.pos], gl, g1, w2, miss, ovr: ov ? r.ovr : null, raw: gl>0 ? (ppg - R[r.pos])*gl : -1e6 + ppg}, base, v: base*(1+(+r.adj||0)/100)});
@@ -760,8 +770,10 @@ function Situation({r, M, canEdit, onSave}){
   const st = r.st, o = r.out;
   const [f, setF] = useState(o && o.f || 0), [note, setNote] = useState((o&&o.note)||'');
   const lbl = {'-2':'Much worse','-1':'Worse','0':'No change','1':'Better','2':'Much better'};
-  if(!r.moved && !o && !canEdit) return null;
+  const ev = M.cfg && M.cfg.__env && r.team ? M.cfg.__env[r.team] : null, ef = ev!=null ? envF(M.cfg, r.team, r.pos, !!M.redraft, r) : 1;
+  if(!r.moved && !o && !canEdit && Math.abs(ef-1)<0.005) return null;
   return html`<div class="step"><span class="n">⇄</span><div style=${{minWidth:0}}><div class="t">Situation</div>
+    ${Math.abs(ef-1)>=0.005 ? html`<p class="sub">Offense: betting lines have ${r.team} scoring ${fmt(Math.abs(ev*100),0)}% ${ev>=0?'more':'less'} than an average team over its next games, so his expected scoring is nudged ${ef>=1?'+':'−'}${fmt(Math.abs(ef-1)*100,1)}%${M.redraft?'':' (a fraction of the one-season effect, since offenses regress and players move)'}.</p>` : null}
     ${r.moved ? html`<p class="sub">Changed teams (${r.moved.from} → ${r.moved.to}). His numbers came in another offense, so they count 25% less and his range of outcomes is wider until he builds a record there.</p>` : null}
     ${o && o.f ? html`<p class="sub">Outlook: <b>${lbl[o.f]}</b>${o.note ? ' — '+o.note : ''}${o.src ? html` · <a href=${o.src} target="_blank" rel="noopener">source</a>` : null}${o.auto ? ' (news check, '+new Date(o.at).toLocaleDateString([], {month:'short', day:'numeric'})+')' : ''}. Expected scoring ${st.preOut ? fmt(st.preOut,1)+' → '+fmt(st.ppg,1)+' PPG' : 'adjusted'}${M.redraft ? '' : ' (dynasty uses 60% of the change)'}.</p>` : null}
     ${canEdit ? html`<p class="sub">New role, new QB, a trade, a coaching change? Set his outlook. Your setting is never replaced by the automatic news check.</p>
@@ -821,7 +833,7 @@ function valueHistory(players, cfg, adj, S, nowT){
     });
     pts.push({lab:'W'+w, t, ps});
   }
-  return pts.map(x=>{ const m = rankAll(x.ps, cfg, x.t, adj), by = {}; m.rows.forEach(r=>by[r.k] = {v:r.v, rank:r.rank, prank:r.prank}); return {lab:x.lab, t:x.t, sep:x.sep, by}; });
+  return pts.map(x=>{ const m = rankAll(x.ps, {...cfg, __env:null}, x.t, adj), by = {}; m.rows.forEach(r=>by[r.k] = {v:r.v, rank:r.rank, prank:r.prank}); return {lab:x.lab, t:x.t, sep:x.sep, by}; });
 }
 function ValueHistory({r, H}){
   const [sel, setSel] = useState(null);
@@ -1090,12 +1102,12 @@ function App(){
   }, [D.QB, D.RB, D.WR, D.TE, D.injuries, D.outlook]);
   const M = useMemo(()=>{
     if(!players.length) return null;
-    const adj = (D.adj&&D.adj.rows)||{}, cls = (D.classes&&D.classes.years)||{}, m = rankAll(players, {...cfg, __class:cls, __ecrAt:(D.meta&&D.meta.ecrAt)||null}, now, adj);
+    const adj = (D.adj&&D.adj.rows)||{}, cls = (D.classes&&D.classes.years)||{}, m = rankAll(players, {...cfg, __class:cls, __ecrAt:(D.meta&&D.meta.ecrAt)||null, __env:(D.meta&&D.meta.env)||null}, now, adj);
     const w30 = D.meta && D.meta.w30;
     if(w30){   // the same board as of ~30 days ago: this season's stats through week w30, everyone 30 days younger
       const S = String(m.season), then = now - 30*864e5;
       const past = players.map(p=> p.s30===undefined ? p : {...p, s:{...p.s, [S]:p.s30}});
-      const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left}, then, adj), by = {};
+      const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left, __env:(D.meta&&D.meta.env)||null}, then, adj), by = {};
       m0.rows.forEach(r=>by[r.k]=r);
       m.rows.forEach(r=>{ const o = by[r.k]; if(o){ r.d30 = r.v - o.v; r.r30Overall = o.rank; } else if(r.s30!==undefined) r.d30 = r.v; });
       m.w30 = w30;
