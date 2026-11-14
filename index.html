@@ -294,7 +294,7 @@ td{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink2)
 /* ===== Dynasty Value Board engine (pure functions, no DOM) ===== */
 const POS = ['QB','RB','WR','TE'];
 // one season of raw stats, stored as an array to keep the database small
-const F = ['g','att','py','ptd','pint','car','ry','rtd','tg','rec','recy','rectd','fl','fdP','fdR','fdU'];
+const F = ['g','att','py','ptd','pint','car','ry','rtd','tg','rec','recy','rectd','fl','fdP','fdR','fdU','sk'];
 const DEF = { teams:12, qb:1, rb:2, wr:3, te:1, flex:1, sf:1,
   ppr:1, tep:0.5, ptd:4, pyd:25, int:-2, fl:-2, fd:0, upside:1, dcw:1, star:1.15, mode:'neutral', league:'dynasty', athw:1 };
 const PRESETS = {
@@ -367,6 +367,7 @@ function seasonPts(a, pos, c, model){
   let p = s.py/c.pyd + s.ptd*c.ptd + s.pint*c.int + s.ry*0.1 + s.rtd*6 + s.recy*0.1 + s.rectd*6 + s.fl*c.fl
         + s.rec*(c.ppr + (pos==='TE' ? c.tep - (model ? TEP0 : 0) : 0));
   if(c.fd) p += (s.fdR+s.fdU)*c.fd;
+  if(c.sack) p += s.sk*c.sack;   // points per sack taken (e.g. UFFA: -0.5)
   if(c.fdRec||c.fdRush||c.fdPass) p += s.fdR*(c.fdRec||0) + s.fdU*(c.fdRush||0) + s.fdP*(c.fdPass||0);   // first downs scored by type (e.g. UFFA: catch 1, run 0.5, pass 0.2)
   return {g:s.g, pts:p, ppg:p/s.g};
 }
