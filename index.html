@@ -260,22 +260,28 @@ td{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink2)
 .hread .chg{margin-left:auto;font-family:var(--f-mono);font-size:12px}
 .hread .chg.up{color:var(--good)}.hread .chg.dn{color:var(--bad)}
 .chartpanel{display:flex;flex-direction:column;gap:10px}
-.chartwrap{overflow-x:auto;margin-inline:-14px;padding-inline:14px;-webkit-overflow-scrolling:touch}
-.chart-grid{display:grid;gap:0;min-width:max-content;font-size:12px}
-.chart-grid .ch{position:sticky;top:0;z-index:2;background:var(--surface);padding:8px 8px 6px;font-family:var(--f-display);font-size:15px;letter-spacing:.04em;text-transform:uppercase;border-bottom:2px solid var(--line2)}
+.cwide{display:none} .cnarrow{display:block}
+@media (min-width:900px){.cwide{display:block} .cnarrow{display:none}}
+.chart-grid{display:grid;font-size:12px;border:1px solid var(--line);border-radius:10px}
+.chart-grid .ch{position:sticky;top:64px;z-index:2;background:var(--raised);padding:9px 10px 7px;font-family:var(--f-display);font-weight:800;font-size:15px;letter-spacing:.05em;text-transform:uppercase;border-bottom:2px solid var(--line2)}
 .chart-grid .ch.QB{color:var(--qb);border-color:var(--qb)} .chart-grid .ch.RB{color:var(--rb);border-color:var(--rb)} .chart-grid .ch.WR{color:var(--wr);border-color:var(--wr)} .chart-grid .ch.TE{color:var(--te);border-color:var(--te)} .chart-grid .ch.PK{color:var(--pk);border-color:var(--pk)}
-.chart-grid .ch.v{position:sticky;left:0;z-index:3;color:var(--muted);font-size:11px}
-.chart-grid .cv{position:sticky;left:0;z-index:1;background:var(--surface);font-family:var(--f-mono);font-weight:600;color:var(--gold);padding:7px 6px;border-bottom:1px solid var(--line);text-align:right}
-.chart-grid .cc{border-bottom:1px solid var(--line);border-left:1px solid var(--line);padding:3px 4px;display:flex;flex-direction:column;gap:3px;min-width:0}
-.ce{display:block;width:100%;text-align:left;border:0;border-left:3px solid transparent;background:transparent;color:var(--ink);padding:3px 6px;border-radius:5px;cursor:pointer;min-width:0}
+.chart-grid .ch.v{color:var(--muted);font-size:11px}
+.chart-grid .cv{font-family:var(--f-mono);font-weight:600;font-size:11px;color:var(--gold);padding:8px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.chart-grid .cc{border-bottom:1px solid var(--line);border-left:1px solid var(--line);padding:4px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.band{margin-top:6px} .band .bh{display:flex;align-items:center;gap:10px;font-family:var(--f-mono);font-weight:700;font-size:12px;color:var(--gold);margin:4px 0 6px} .band .bh i{flex:1;height:1px;background:var(--line2)}
+.band .bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
+.ce{display:block;width:100%;text-align:left;border:1px solid var(--line);border-left:3px solid var(--line2);background:var(--surface);color:var(--ink);padding:5px 7px;border-radius:7px;cursor:pointer;min-width:0;font:inherit}
 .ce:hover{background:var(--hover)}
-.ce.buy{border-left-color:var(--good);background:var(--good-bg)} .ce.sell{border-left-color:var(--bad);background:var(--bad-bg)}
-.ce.my{outline:1px solid var(--gold);outline-offset:-1px}
-.ce.pk{cursor:default;border-left-color:var(--pk)}
-.ce .cn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ce.QB{border-left-color:var(--qb)} .ce.RB{border-left-color:var(--rb)} .ce.WR{border-left-color:var(--wr)} .ce.TE{border-left-color:var(--te)} .ce.PK{border-left-color:var(--pk);cursor:default}
+.ce.buy{background:var(--good-bg);border-color:rgba(67,196,135,.35)} .ce.sell{background:var(--bad-bg);border-color:rgba(240,107,107,.35)}
+.ce.QB.buy,.ce.QB.sell{border-left-color:var(--qb)} .ce.RB.buy,.ce.RB.sell{border-left-color:var(--rb)} .ce.WR.buy,.ce.WR.sell{border-left-color:var(--wr)} .ce.TE.buy,.ce.TE.sell{border-left-color:var(--te)}
+.ce.my{box-shadow:inset 0 0 0 1px var(--gold)}
+.ce .cn{display:flex;align-items:baseline;gap:6px;font-weight:600;font-size:12.5px}
+.ce .nmx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ce .cvx{font-family:var(--f-mono);font-size:12.5px;color:var(--ink)}
 .ce .cn .star{color:var(--gold)} .ce .cn .cx{font-size:10px;color:var(--bad);font-weight:700}
-.ce .cm{display:flex;gap:6px;align-items:center;font-family:var(--f-mono);font-size:10.5px;color:var(--ink2);margin-top:1px;white-space:nowrap}
-.ce .cm .tm{font-size:9.5px;padding:0 4px}
+.ce .cm{display:flex;gap:6px;align-items:center;font-family:var(--f-mono);font-size:10.5px;color:var(--ink2);margin-top:2px;white-space:nowrap;flex-wrap:wrap;row-gap:1px}
+.ce .cm .tm{font-size:9.5px;padding:0 4px} .ce .cm .pp{color:var(--muted)}
 .ce .up{color:var(--good)} .ce .dn{color:var(--bad)} .ce .mu{color:var(--muted)}
 .lg{font-weight:700;padding:0 4px;border-radius:4px} .lg.buy{background:var(--good-bg);color:var(--good)} .lg.sell{background:var(--bad-bg);color:var(--bad)}
 </style>
@@ -1062,48 +1068,49 @@ function Method({M, meta}){
 }
 
 /* ---------- app ---------- */
-// ---- Trade chart: every player on one value ladder, positions side by side, so equal values line up across columns.
-// Chart value = board value scaled so the #1 player is 100. Buy/sell colour = your board vs expert consensus (where the
-// experts rank him at his position, what that spot is worth on your board). Trend = 30-day change. PPG = this season.
-// vs prior = this season's PPG minus his previous two seasons'. Off = his team's scoring per the betting lines vs average.
+// ---- Trade chart: every player on one value ladder, in your board's own values. Equal values share a band, so a 120 RB
+// and a 120 WR sit side by side. Buy/sell colour = your board vs expert consensus (where the experts rank him at his
+// position, what that spot is worth on your board). Under each name: team, 30-day trend, PPG this season, PPG vs his
+// previous two seasons, his offense per the betting lines. Wide screens get position columns; phones get stacked bands.
+function bandOf(v){ const st = v>=300 ? 25 : v>=150 ? 10 : v>=50 ? 5 : v>=20 ? 2 : 1; const lo = Math.floor(v/st)*st; return {lo, hi:lo+st-(st>1?1:0), st}; }
 function Chart({M, mine, onOpen}){
   const [pos, setPos] = useState(()=>lsGet('dvb.chartPos', 'ALL'));
   const [onlyMine, setOnlyMine] = useState(false);
   useEffect(()=>lsSet('dvb.chartPos', pos), [pos]);
   if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The chart fills in once the board has players.</span></div>`;
-  const top = M.rows[0].v || 1, cv = v => 100*v/top;
-  const LIM = {QB:36, RB:60, WR:72, TE:30};
-  const env = M.cfg.__env || {};
+  const top = M.rows[0].v || 1, LIM = {QB:36, RB:60, WR:72, TE:30}, env = M.cfg.__env || {};
   const lad = {}; POS.forEach(q=>lad[q] = M.rows.filter(r=>r.pos===q).map(r=>r.v));
   const sig = r => { if(!r.ecrPos || !lad[r.pos]) return ''; const L = lad[r.pos], mv = L[Math.min(L.length, r.ecrPos)-1]; const g = (r.v-mv)/Math.max(mv, top*0.04); return g>=0.2 ? 'buy' : g<=-0.2 ? 'sell' : ''; };
   const prior = r => { const a = r.lines && r.lines[1], b = r.lines && r.lines[2], g = (a?a.g:0)+(b?b.g:0); return g>=4 ? ((a?a.pts:0)+(b?b.pts:0))/g : null; };
   const cols = (M.redraft ? POS : [...POS, 'PK']).filter(q=>pos==='ALL' || q===pos);
   const Y = M.picks && M.picks.length ? Math.min(...M.picks.map(p=>p.yr)) : null;
   const items = [];
-  POS.forEach(q=>{ if(!cols.includes(q)) return; M.rows.filter(r=>r.pos===q).slice(0, pos==='ALL' ? LIM[q] : 120).forEach(r=>{ if(onlyMine && !mine.has(r.k)) return; items.push({q, r, c:cv(r.v)}); }); });
-  if(cols.includes('PK') && !onlyMine) (M.picks||[]).filter(p=>p.rd<=(pos==='PK'?4:2) && (p.generic ? p.yr>Y : true)).forEach(p=>items.push({q:'PK', r:p, c:cv(p.v)}));
-  const bin = c => c>=20 ? Math.round(c) : Math.round(c*2)/2;
-  const B = new Map(); items.forEach(it=>{ if(it.c < 0.5) return; const b = bin(it.c); if(!B.has(b)) B.set(b, {}); (B.get(b)[it.q] = B.get(b)[it.q] || []).push(it); });
-  const bins = [...B.keys()].sort((a,b)=>b-a);
+  POS.forEach(q=>{ if(!cols.includes(q)) return; M.rows.filter(r=>r.pos===q).slice(0, pos==='ALL' ? LIM[q] : 150).forEach(r=>{ if(onlyMine && !mine.has(r.k)) return; items.push({q, r, v:r.v}); }); });
+  if(cols.includes('PK') && !onlyMine) (M.picks||[]).filter(p=>p.rd<=(pos==='PK'?4:2) && (p.generic ? p.yr>Y : true)).forEach(p=>items.push({q:'PK', r:p, v:p.v}));
+  const B = new Map(); items.forEach(it=>{ if(it.v < 1) return; const b = bandOf(it.v); if(!B.has(b.lo)) B.set(b.lo, {b, by:{}, all:[]}); const x = B.get(b.lo); (x.by[it.q] = x.by[it.q] || []).push(it); x.all.push(it); });
+  const bands = [...B.values()].sort((a,b)=>b.b.lo-a.b.lo);
+  bands.forEach(x=>x.all.sort((a,b)=>b.v-a.v));
   const lbl = {QB:'Quarterbacks', RB:'Running backs', WR:'Wide receivers', TE:'Tight ends', PK:'Draft picks'};
-  const cell = it => { const r = it.r;
-    if(it.q==='PK') return html`<div key=${r.k} class="ce pk"><div class="cn">${r.n}</div><div class="cm">${r.generic ? 'round average' : 'slot value'}</div></div>`;
+  const rng = b => b.st>1 ? `${b.lo}–${b.hi}` : `${b.lo}`;
+  const card = it => { const r = it.r;
+    if(it.q==='PK') return html`<div key=${r.k} class="ce pk PK"><div class="cn"><span class="nmx">${r.n}</span><b class="cvx">${fmtV(r.v)}</b></div><div class="cm">${r.generic ? 'round average' : 'slot value'}</div></div>`;
     const l = r.lines && r.lines[0], p0 = prior(r), oe = l && p0!=null && l.g>=2 ? l.ppg - p0 : null, d = r.d30!=null && Math.abs(r.d30)>=0.5 ? r.d30 : null, e = env[r.team], s = sig(r), my = mine.has(r.k);
-    return html`<button key=${r.k} class=${'ce '+s+(my?' my':'')} onClick=${()=>onOpen(r)} title=${s==='buy'?'Your board is higher than expert consensus':s==='sell'?'Expert consensus is higher than your board':''}>
-      <div class="cn">${my ? html`<span class="star">★</span> ` : null}${r.n}${r.inj ? html` <span class="cx">${r.inj}</span>` : null}</div>
-      <div class="cm"><${TeamTag} t=${r.team}/>${d!=null ? html`<span class=${d>0?'up':'dn'}>${d>0?'▲':'▼'}${fmt(Math.abs(d))}</span>` : null}
-        ${l ? html`<span>${fmt(l.ppg,1)}</span>` : html`<span class="mu">–</span>`}
+    return html`<button key=${r.k} class=${'ce '+r.pos+' '+s+(my?' my':'')} onClick=${()=>onOpen(r)} title=${s==='buy'?'Your board is higher than expert consensus':s==='sell'?'Expert consensus is higher than your board':''}>
+      <div class="cn"><span class="nmx">${my ? html`<span class="star">★</span> ` : null}${r.n}${r.inj ? html` <span class="cx">${r.inj}</span>` : null}</span><b class="cvx">${fmtV(r.v)}</b></div>
+      <div class="cm"><span class="pp">${r.pos}${r.prank}</span><${TeamTag} t=${r.team}/>${d!=null ? html`<span class=${d>0?'up':'dn'}>${d>0?'▲':'▼'}${fmt(Math.abs(d))}</span>` : null}
+        ${l ? html`<span>${fmt(l.ppg,1)}</span>` : null}
         ${oe!=null ? html`<span class=${oe>=1?'up':oe<=-1?'dn':'mu'}>${oe>=0?'+':''}${fmt(oe,1)}</span>` : null}
-        ${e!=null && Math.abs(e)>=0.04 ? html`<span class=${'off '+(e>0?'up':'dn')}>${e>0?'+':''}${fmt(e*100,0)}%</span>` : null}</div></button>`; };
+        ${e!=null && Math.abs(e)>=0.04 ? html`<span class=${e>0?'up':'dn'}>${e>0?'+':''}${fmt(e*100,0)}%</span>` : null}</div></button>`; };
   return html`<div class="panel chartpanel">
-    <div><h2>Trade chart</h2><span class="note">${fmtSummary(M.cfg)}</span></div>
+    <div><h2>Trade chart</h2><span class="note">${fmtSummary(M.cfg)} · board values</span></div>
     <div class="controls"><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${[['ALL','All'],['QB','QB'],['RB','RB'],['WR','WR'],['TE','TE'],...(M.redraft?[]:[['PK','Picks']])]}/>
       <button class=${'btn'+(onlyMine?' primary':'')} onClick=${()=>setOnlyMine(!onlyMine)}>★ My players</button></div>
-    <p class="note" style=${{margin:0}}>Players at the same value line up across positions (#1 = 100). <span class="lg buy">Green</span> your board is higher than expert consensus (buy), <span class="lg sell">red</span> the market is higher (sell). Under each name: team · 30-day trend · PPG this season · PPG vs his previous two seasons · his offense per the betting lines. Values add up roughly, but stars are worth more than the sum of parts: check a deal on the Trade tab.</p>
-    <div class="chartwrap"><div class="chart-grid" style=${{gridTemplateColumns:`52px repeat(${cols.length}, minmax(${cols.length>2?150:180}px, 1fr))`}}>
+    <p class="note" style=${{margin:0}}>The same values as the Rankings tab, grouped into bands so equal values sit together across positions. <span class="lg buy">Green</span> your board is higher than expert consensus (buy), <span class="lg sell">red</span> the market is higher (sell). Under each name: position rank · team · 30-day trend · PPG this season · vs his previous two seasons · his offense per the betting lines. Stars are worth more than the sum of parts: check a deal on the Trade tab.</p>
+    <div class="cwide"><div class="chart-grid" style=${{gridTemplateColumns:`76px repeat(${cols.length}, minmax(0, 1fr))`}}>
       <div class="ch v">Value</div>${cols.map(q=>html`<div key=${q} class=${'ch '+q}>${lbl[q]}</div>`)}
-      ${bins.map(b=>html`<${React.Fragment} key=${b}><div class="cv">${b>=20?fmt(b):b.toFixed(1)}</div>${cols.map(q=>html`<div key=${q} class="cc">${(B.get(b)[q]||[]).map(cell)}</div>`)}</${React.Fragment}>`)}
+      ${bands.map(x=>html`<${React.Fragment} key=${x.b.lo}><div class="cv">${rng(x.b)}</div>${cols.map(q=>html`<div key=${q} class="cc">${(x.by[q]||[]).map(card)}</div>`)}</${React.Fragment}>`)}
     </div></div>
+    <div class="cnarrow">${bands.map(x=>html`<section key=${x.b.lo} class="band"><div class="bh"><span>${rng(x.b)}</span><i></i></div><div class="bgrid">${x.all.map(card)}</div></section>`)}</div>
   </div>`;
 }
 const VIEWS = ['home','board','chart','trade','format','method'];
