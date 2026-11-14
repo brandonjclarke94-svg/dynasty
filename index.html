@@ -307,7 +307,7 @@ const PRESETS = {
 const PV = {   // refit Nov 12 2026 on three seasons of nflverse stats, against a 50/50 blend of PlayerProfiler and FantasyPros ECR (TE 75/25),
                // inside football guard rails: QBs fade ~35-40, RBs ~27-31, WRs/TEs ~31-35; at most a 20% yearly discount; QBs' records are trusted most
   QB:{k:24.07, mid:37.50, d:0.800, shr:20.0, a1:0.86, a3:0.37, inj:0.24, lam:0.015, dpA:44.52, sig:1.118, ys:0.00, Rp:12.70, tb:0.894, rook:0.214},
-  RB:{k:14.27, mid:31.00, d:0.800, shr:33.1, a1:2.54, a3:0.59, inj:0.33, lam:0.613, dpA:20.45, sig:2.510, ys:0.01, Rp:7.19, tb:0.500, rook:1.200},
+  RB:{k:12.65, mid:31.00, d:0.800, shr:33.1, a1:3.81, a3:0.59, inj:0.33, lam:0.613, dpA:20.45, sig:2.510, ys:0.01, Rp:7.19, tb:0.500, rook:1.200},
   WR:{k:12.49, mid:35.00, d:0.826, shr:30.0, a1:2.65, a3:0.76, inj:0.07, lam:0.247, dpA:23.85, sig:2.009, ys:0.24, Rp:8.12, tb:0.549, rook:0.477},
   TE:{k:10.58, mid:34.44, d:0.945, shr:30.0, a1:3.00, a3:0.69, inj:0.3, lam:0.421, dpA:19.94, sig:1.311, ys:0.00, Rp:7.38, tb:0.728, rook:0.129} };
 const ROOK = {QB:0.25, RB:0.3, WR:0.6, TE:0.5};   // how far above replacement a first-overall pick starts, by position
@@ -381,7 +381,7 @@ function weighted(lines, Q){
   return {num, den, gms, ppg: den>0 ? num/den : null};
 }
 // Lifetime value. Returns the steps so the page can show its work.
-function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om){
+function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle){
   const md = MODES[mode] || MODES.neutral;
   dcw = dcw==null ? 1 : dcw;
   const c = PV[Q], sc = R/c.Rp, st = {R, sc};
@@ -399,6 +399,8 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om){
     ppg = R*Math.min(1.1, (c.tb!=null?c.tb:TGT.base) + (c.rook!=null?c.rook:ROOK[Q])*dcw*t); st.rookie = true;
     // not playing is information: deep into a season with no snaps means he's behind someone. Full markdown by week 8.
     if(bench){ st.bench = BENCH*bench; ppg *= 1 - st.bench; } }
+  // same idea for a veteran: healthy, on a roster, and no games at all this far into the season means he's buried
+  if(w.den>0 && idle){ st.idle = BENCH*idle; ppg *= 1 - st.idle; }
   st.shrunk = ppg;
   if(w.den>0 && dp && age < 25.5 && c.lam >= 0.02){   // (QBs: the fit gave this ~no weight, so it's skipped)
     const prior = Math.max(0, (c.dpA - 3.3*Math.log(dp))*sc);
@@ -467,7 +469,11 @@ function rankAll(players, cfgIn, now, adj){
     const dpE = r.dp ? Math.max(1, r.dp*Math.exp(-ATH[r.pos]*az*(c.athw!=null?c.athw:1) + COMPB[r.pos]*cz)) : r.dp;
     const wv = r.moved ? {...r.w, num:r.w.num*MOVE_TRUST, den:r.w.den*MOVE_TRUST} : r.w;
     const ef = envF(c, r.team, r.pos, false, r, now);
-    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(r.moved?MOVE_SPREAD:1), c.dcw, c.mode, bench, outMult(r.out, false)*ef);
+    // a new team widens the range of outcomes only for a real contributor (a trade or signing into a role); a fringe
+    // player who was cut and picked up isn't a lottery ticket
+    const contrib = r.moved && r.w.ppg!=null && r.w.ppg >= R[r.pos]*0.85;
+    const idle = !r.inj && !(r.lines[0] && r.lines[0].g>0) && !ovrLeft(r.ovr, now) && !(r.rep && /Out|Doubtful/.test(r.rep.s||'')) ? bench : 0;
+    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, bench, outMult(r.out, false)*ef, idle);
     if(ef!==1) st.env = {f:ef, e:c.__env[r.team]};
     if(r.moved) st.moved = r.moved; if(r.out) st.out = r.out;
     st.dpE = dpE;
@@ -943,6 +949,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
     <div class="step"><span class="n">${st.prior!=null && st.lam>0.005?4:3}</span><div style=${{minWidth:0}}><div class="t">Career, year by year</div>
       <p class="sub">Each future season counts what he scores above replacement, plus the upside of his good outcomes, times the chance he's still a fantasy ${r.pos} at that age${c.d<1?', discounted '+fmt(100*(1-c.d),0)+'% a year':''}.</p>
       <p class="note" style=${{marginTop:6}}>The curve is in the Profile section above.</p>
+      ${st.idle ? html`<p class="sub" style=${{marginTop:8}}>Healthy but no games this season: his expected scoring is marked down ${fmt(100*st.idle,0)}%, the same way a rookie who hasn't taken a snap is.</p>` : null}
       ${st.inj ? html`<p class="sub" style=${{marginTop:8}}>Currently ${r.inj}: value marked down ${fmt(100*st.inj,0)}%.</p>` : null}
       ${st.miss && st.ovr ? html`<p class="sub" style=${{marginTop:8}}>Injury news: out about ${fmt(st.miss,0)} more games${st.ovr.note?' ('+st.ovr.note+')':''}, so value is marked down ${fmt(100*(1-st.missF),1)}%. A few missed games barely touch a dynasty value.</p>` : null}
       ${st.miss && !st.ovr ? html`<p class="sub" style=${{marginTop:8}}>Injury report: ${r.rep.s==='DNP'?'missed practice':r.rep.s}${r.rep.what?' ('+r.rep.what.toLowerCase()+')':''}${r.rep.out>1?', out '+r.rep.out+' straight weeks':''}. Expected to miss about ${fmt(st.miss,1)} more games, so value is marked down ${fmt(100*(1-st.missF),1)}%. Short injuries barely touch a dynasty value.</p>` : null}
@@ -1029,7 +1036,7 @@ function Method({M, meta}){
   return html`<div class="panel"><h2>How a value is built</h2>
       <p>Every number on this board comes from one formula run over each player's real game logs. Nothing is copied from another site's rankings.</p>
       <h3>1. Production, scored your way</h3>
-      <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight.</p>
+      <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight. Running backs lean hardest on this season (3.8× a game), because roles at RB change fastest and the backtest ranks RBs better that way.</p>
       <h3>2. Pulled toward replacement</h3>
       <p class="sub">A player's average gets blended with phantom games at the level a player like him usually reaches: near replacement for an early first-round pick, well below it for a late-round or undrafted player. A hot few weeks can't vault a backup past a proven starter, and a backup with one start can't coast on being young. QBs get the most phantom games (see the table) because one QB season says the least about the next.</p>
       <h3>3. Draft capital for young players</h3>
