@@ -51,7 +51,7 @@ header.top .wrap{display:flex;align-items:center;gap:14px;padding-block:10px}
 main{padding-block:18px 110px;display:grid;gap:16px}
 @media (min-width:900px){main{padding-bottom:48px}}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(14,17,21,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
-nav.tabs .wrap{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding-block:6px}
+nav.tabs .wrap{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;padding-block:6px}
 nav.tabs button{border:0;background:none;padding:6px 2px;border-radius:10px;color:var(--muted);display:grid;justify-items:center;gap:2px;font-size:10.5px;font-weight:600;letter-spacing:.02em}
 nav.tabs button svg{width:20px;height:20px}
 nav.tabs button[aria-current="page"]{color:var(--ink)}
@@ -259,6 +259,25 @@ td{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink2)
 .hread .num{font-family:var(--f-mono);font-size:18px;color:var(--ink);font-weight:600}
 .hread .chg{margin-left:auto;font-family:var(--f-mono);font-size:12px}
 .hread .chg.up{color:var(--good)}.hread .chg.dn{color:var(--bad)}
+.chartpanel{display:flex;flex-direction:column;gap:10px}
+.chartwrap{overflow-x:auto;margin-inline:-14px;padding-inline:14px;-webkit-overflow-scrolling:touch}
+.chart-grid{display:grid;gap:0;min-width:max-content;font-size:12px}
+.chart-grid .ch{position:sticky;top:0;z-index:2;background:var(--surface);padding:8px 8px 6px;font-family:var(--f-display);font-size:15px;letter-spacing:.04em;text-transform:uppercase;border-bottom:2px solid var(--line2)}
+.chart-grid .ch.QB{color:var(--qb);border-color:var(--qb)} .chart-grid .ch.RB{color:var(--rb);border-color:var(--rb)} .chart-grid .ch.WR{color:var(--wr);border-color:var(--wr)} .chart-grid .ch.TE{color:var(--te);border-color:var(--te)} .chart-grid .ch.PK{color:var(--pk);border-color:var(--pk)}
+.chart-grid .ch.v{position:sticky;left:0;z-index:3;color:var(--muted);font-size:11px}
+.chart-grid .cv{position:sticky;left:0;z-index:1;background:var(--surface);font-family:var(--f-mono);font-weight:600;color:var(--gold);padding:7px 6px;border-bottom:1px solid var(--line);text-align:right}
+.chart-grid .cc{border-bottom:1px solid var(--line);border-left:1px solid var(--line);padding:3px 4px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.ce{display:block;width:100%;text-align:left;border:0;border-left:3px solid transparent;background:transparent;color:var(--ink);padding:3px 6px;border-radius:5px;cursor:pointer;min-width:0}
+.ce:hover{background:var(--hover)}
+.ce.buy{border-left-color:var(--good);background:var(--good-bg)} .ce.sell{border-left-color:var(--bad);background:var(--bad-bg)}
+.ce.my{outline:1px solid var(--gold);outline-offset:-1px}
+.ce.pk{cursor:default;border-left-color:var(--pk)}
+.ce .cn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ce .cn .star{color:var(--gold)} .ce .cn .cx{font-size:10px;color:var(--bad);font-weight:700}
+.ce .cm{display:flex;gap:6px;align-items:center;font-family:var(--f-mono);font-size:10.5px;color:var(--ink2);margin-top:1px;white-space:nowrap}
+.ce .cm .tm{font-size:9.5px;padding:0 4px}
+.ce .up{color:var(--good)} .ce .dn{color:var(--bad)} .ce .mu{color:var(--muted)}
+.lg{font-weight:700;padding:0 4px;border-radius:4px} .lg.buy{background:var(--good-bg);color:var(--good)} .lg.sell{background:var(--bad-bg);color:var(--bad)}
 </style>
 
 <div id="root"></div>
@@ -1043,11 +1062,56 @@ function Method({M, meta}){
 }
 
 /* ---------- app ---------- */
-const VIEWS = ['home','board','trade','format','method'];
+// ---- Trade chart: every player on one value ladder, positions side by side, so equal values line up across columns.
+// Chart value = board value scaled so the #1 player is 100. Buy/sell colour = your board vs expert consensus (where the
+// experts rank him at his position, what that spot is worth on your board). Trend = 30-day change. PPG = this season.
+// vs prior = this season's PPG minus his previous two seasons'. Off = his team's scoring per the betting lines vs average.
+function Chart({M, mine, onOpen}){
+  const [pos, setPos] = useState(()=>lsGet('dvb.chartPos', 'ALL'));
+  const [onlyMine, setOnlyMine] = useState(false);
+  useEffect(()=>lsSet('dvb.chartPos', pos), [pos]);
+  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The chart fills in once the board has players.</span></div>`;
+  const top = M.rows[0].v || 1, cv = v => 100*v/top;
+  const LIM = {QB:36, RB:60, WR:72, TE:30};
+  const env = M.cfg.__env || {};
+  const lad = {}; POS.forEach(q=>lad[q] = M.rows.filter(r=>r.pos===q).map(r=>r.v));
+  const sig = r => { if(!r.ecrPos || !lad[r.pos]) return ''; const L = lad[r.pos], mv = L[Math.min(L.length, r.ecrPos)-1]; const g = (r.v-mv)/Math.max(mv, top*0.04); return g>=0.2 ? 'buy' : g<=-0.2 ? 'sell' : ''; };
+  const prior = r => { const a = r.lines && r.lines[1], b = r.lines && r.lines[2], g = (a?a.g:0)+(b?b.g:0); return g>=4 ? ((a?a.pts:0)+(b?b.pts:0))/g : null; };
+  const cols = (M.redraft ? POS : [...POS, 'PK']).filter(q=>pos==='ALL' || q===pos);
+  const Y = M.picks && M.picks.length ? Math.min(...M.picks.map(p=>p.yr)) : null;
+  const items = [];
+  POS.forEach(q=>{ if(!cols.includes(q)) return; M.rows.filter(r=>r.pos===q).slice(0, pos==='ALL' ? LIM[q] : 120).forEach(r=>{ if(onlyMine && !mine.has(r.k)) return; items.push({q, r, c:cv(r.v)}); }); });
+  if(cols.includes('PK') && !onlyMine) (M.picks||[]).filter(p=>p.rd<=(pos==='PK'?4:2) && (p.generic ? p.yr>Y : true)).forEach(p=>items.push({q:'PK', r:p, c:cv(p.v)}));
+  const bin = c => c>=20 ? Math.round(c) : Math.round(c*2)/2;
+  const B = new Map(); items.forEach(it=>{ if(it.c < 0.5) return; const b = bin(it.c); if(!B.has(b)) B.set(b, {}); (B.get(b)[it.q] = B.get(b)[it.q] || []).push(it); });
+  const bins = [...B.keys()].sort((a,b)=>b-a);
+  const lbl = {QB:'Quarterbacks', RB:'Running backs', WR:'Wide receivers', TE:'Tight ends', PK:'Draft picks'};
+  const cell = it => { const r = it.r;
+    if(it.q==='PK') return html`<div key=${r.k} class="ce pk"><div class="cn">${r.n}</div><div class="cm">${r.generic ? 'round average' : 'slot value'}</div></div>`;
+    const l = r.lines && r.lines[0], p0 = prior(r), oe = l && p0!=null && l.g>=2 ? l.ppg - p0 : null, d = r.d30!=null && Math.abs(r.d30)>=0.5 ? r.d30 : null, e = env[r.team], s = sig(r), my = mine.has(r.k);
+    return html`<button key=${r.k} class=${'ce '+s+(my?' my':'')} onClick=${()=>onOpen(r)} title=${s==='buy'?'Your board is higher than expert consensus':s==='sell'?'Expert consensus is higher than your board':''}>
+      <div class="cn">${my ? html`<span class="star">★</span> ` : null}${r.n}${r.inj ? html` <span class="cx">${r.inj}</span>` : null}</div>
+      <div class="cm"><${TeamTag} t=${r.team}/>${d!=null ? html`<span class=${d>0?'up':'dn'}>${d>0?'▲':'▼'}${fmt(Math.abs(d))}</span>` : null}
+        ${l ? html`<span>${fmt(l.ppg,1)}</span>` : html`<span class="mu">–</span>`}
+        ${oe!=null ? html`<span class=${oe>=1?'up':oe<=-1?'dn':'mu'}>${oe>=0?'+':''}${fmt(oe,1)}</span>` : null}
+        ${e!=null && Math.abs(e)>=0.04 ? html`<span class=${'off '+(e>0?'up':'dn')}>${e>0?'+':''}${fmt(e*100,0)}%</span>` : null}</div></button>`; };
+  return html`<div class="panel chartpanel">
+    <div><h2>Trade chart</h2><span class="note">${fmtSummary(M.cfg)}</span></div>
+    <div class="controls"><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${[['ALL','All'],['QB','QB'],['RB','RB'],['WR','WR'],['TE','TE'],...(M.redraft?[]:[['PK','Picks']])]}/>
+      <button class=${'btn'+(onlyMine?' primary':'')} onClick=${()=>setOnlyMine(!onlyMine)}>★ My players</button></div>
+    <p class="note" style=${{margin:0}}>Players at the same value line up across positions (#1 = 100). <span class="lg buy">Green</span> your board is higher than expert consensus (buy), <span class="lg sell">red</span> the market is higher (sell). Under each name: team · 30-day trend · PPG this season · PPG vs his previous two seasons · his offense per the betting lines. Values add up roughly, but stars are worth more than the sum of parts: check a deal on the Trade tab.</p>
+    <div class="chartwrap"><div class="chart-grid" style=${{gridTemplateColumns:`52px repeat(${cols.length}, minmax(${cols.length>2?150:180}px, 1fr))`}}>
+      <div class="ch v">Value</div>${cols.map(q=>html`<div key=${q} class=${'ch '+q}>${lbl[q]}</div>`)}
+      ${bins.map(b=>html`<${React.Fragment} key=${b}><div class="cv">${b>=20?fmt(b):b.toFixed(1)}</div>${cols.map(q=>html`<div key=${q} class="cc">${(B.get(b)[q]||[]).map(cell)}</div>`)}</${React.Fragment}>`)}
+    </div></div>
+  </div>`;
+}
+const VIEWS = ['home','board','chart','trade','format','method'];
 const ico = d => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const TABS = [
   ['home','Home', ico(html`<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>`)],
   ['board','Rankings', ico(html`<path d="M4 6h16M4 12h16M4 18h10"/>`)],
+  ['chart','Chart', ico(html`<path d="M4 20V4M4 20h16"/><path d="M8 16h3M8 12h6M8 8h9"/>`)],
   ['trade','Trade', ico(html`<path d="M7 7h12l-3-3M17 17H5l3 3"/>`)],
   ['format','Format', ico(html`<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>`)],
   ['method','Method', ico(html`<path d="M5 4h14v16H5z"/><path d="M9 8h6M9 12h6M9 16h4"/>`)] ];
@@ -1145,6 +1209,7 @@ function App(){
       ${!loaded ? html`<div class="panel empty"><b>Loading the board</b><span>Fetching the latest values.</span></div>`
         : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
         : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine}/>`
+        : view==='chart' ? html`<${Chart} M=${M} mine=${mine} onOpen=${r=>setOpen(r.k)}/>`
         : view==='trade' ? html`<${Trade} M=${M}/>`
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
         : html`<${Method} M=${M} meta=${D.meta}/>`}
