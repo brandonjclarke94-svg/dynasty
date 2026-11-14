@@ -307,7 +307,7 @@ const PRESETS = {
 const PV = {   // refit Nov 12 2026 on three seasons of nflverse stats, against a 50/50 blend of PlayerProfiler and FantasyPros ECR (TE 75/25),
                // inside football guard rails: QBs fade ~35-40, RBs ~27-31, WRs/TEs ~31-35; at most a 20% yearly discount; QBs' records are trusted most
   QB:{k:24.07, mid:37.50, d:0.800, shr:20.0, a1:0.86, a3:0.37, inj:0.24, lam:0.015, dpA:44.52, sig:1.118, ys:0.00, Rp:12.70, tb:0.894, rook:0.214},
-  RB:{k:12.65, mid:31.00, d:0.800, shr:33.1, a1:3.81, a3:0.59, inj:0.33, lam:0.613, dpA:20.45, sig:2.510, ys:0.01, Rp:7.19, tb:0.500, rook:1.200},
+  RB:{k:13.06, xf:1, mid:31.00, d:0.800, shr:33.1, a1:3.81, a3:0.59, inj:0.33, lam:0.613, dpA:20.45, sig:2.510, ys:0.01, Rp:7.19, tb:0.500, rook:1.200},
   WR:{k:12.49, mid:35.00, d:0.826, shr:30.0, a1:2.65, a3:0.76, inj:0.07, lam:0.247, dpA:23.85, sig:2.009, ys:0.24, Rp:8.12, tb:0.549, rook:0.477},
   TE:{k:10.58, mid:34.44, d:0.945, shr:30.0, a1:3.00, a3:0.69, inj:0.3, lam:0.421, dpA:19.94, sig:1.311, ys:0.00, Rp:7.38, tb:0.728, rook:0.129} };
 const ROOK = {QB:0.25, RB:0.3, WR:0.6, TE:0.5};   // how far above replacement a first-overall pick starts, by position
@@ -390,7 +390,10 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle)
   // a late-round or undrafted player below it. A long track record outweighs this.
   const tdp = dp ? Math.max(0, 1 - Math.log(dp)/Math.log(257)) : 0;
   const rook = c.rook!=null ? c.rook : ROOK[Q];
-  const youth = Math.max(0, Math.min(1, (26 - age)/3));     // draft slot stops mattering by about 26
+  // experience fade (RBs): youth's benefit of the doubt also runs out with games played, not just birthdays. A 23-year-old
+  // with two seasons of ordinary play isn't a prospect any more. Backtested: helps RB rankings, hurts WR/QB, so RB only.
+  const expF = 1 - (c.xf||0)*Math.min(1, (w.gms||0)/(GF*17));
+  const youth = Math.max(0, Math.min(1, (26 - age)/3))*expF;     // draft slot stops mattering by about 26
   const target = R*Math.min(1.1, (c.tb!=null?c.tb:TGT.base) + rook*dcw*tdp*youth);
   st.target = target;
   if(w.den>0) ppg = (w.num + c.shr*target)/(w.den + c.shr);
@@ -415,7 +418,7 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle)
   let s=0, sm=0, surv=1; const yrs=[];
   for(let j=0;j<25;j++){
     const t = age+j; if(j>0) surv *= 1 - 1/(1+Math.exp(-(t-c.mid))); if(surv<0.01) break;
-    const sd = (st.rookie ? 1 + (ROOKSD[Q]-1)*tdp : 1)*c.sig*upside*md.up*sc*(1 + c.ys*yf*Math.max(0,25-t)/3)*(1+0.15*j), z = (ppg-R)/sd;
+    const sd = (st.rookie ? 1 + (ROOKSD[Q]-1)*tdp : 1)*c.sig*upside*md.up*sc*(1 + c.ys*yf*expF*Math.max(0,25-t)/3)*(1+0.15*j), z = (ppg-R)/sd;
     const yv = Math.pow(c.d,j)*surv*(sd*nPdf(z) + (ppg-R)*nCdf(z));
     s += yv; sm += md.yr(j)*yv; yrs.push({age:t, surv, yv:yv*c.k});
   }
@@ -467,13 +470,19 @@ function rankAll(players, cfgIn, now, adj){
     const az = r.ath!=null ? Math.max(-2, Math.min(2, r.ath)) : 0;
     const cz = r.comp ? Math.max(-2, Math.min(2.5, r.comp[0])) : 0;
     const dpE = r.dp ? Math.max(1, r.dp*Math.exp(-ATH[r.pos]*az*(c.athw!=null?c.athw:1) + COMPB[r.pos]*cz)) : r.dp;
-    const wv = r.moved ? {...r.w, num:r.w.num*MOVE_TRUST, den:r.w.den*MOVE_TRUST} : r.w;
+    // A season cut short by an injury he's still out with says little about him: his last season stands in with extra
+    // weight (halfway to this season's), and the few games he played this year count 1x. And being hurt isn't being benched: no no-snap markdown.
+    const hurt = !!r.inj || ovrLeft(r.ovr, now) >= 4;
+    let w0 = r.w;
+    if(hurt && r.w.den>0 && (!r.lines[0] || r.lines[0].g < 0.6*gS)){ const cQ = PV[r.pos], Lm = [S, S-1, S-2].map(y=>seasonPts(r.p.s&&r.p.s[y], r.pos, c, true)); let num=0, den=0, gms=0;
+      [[Lm[0],1],[Lm[1],(1+cQ.a1)/2],[Lm[2],1]].forEach(([l,wt])=>{ if(l&&l.g){ num+=wt*l.pts; den+=wt*l.g; gms+=l.g; } }); w0 = {num, den, gms, ppg: den>0?num/den:null}; }
+    const wv = r.moved ? {...w0, num:w0.num*MOVE_TRUST, den:w0.den*MOVE_TRUST} : w0;
     const ef = envF(c, r.team, r.pos, false, r, now);
     // a new team widens the range of outcomes only for a real contributor (a trade or signing into a role); a fringe
     // player who was cut and picked up isn't a lottery ticket
     const contrib = r.moved && r.w.ppg!=null && r.w.ppg >= R[r.pos]*0.85;
     const idle = !r.inj && !(r.lines[0] && r.lines[0].g>0) && !ovrLeft(r.ovr, now) && !(r.rep && /Out|Doubtful/.test(r.rep.s||'')) ? bench : 0;
-    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, bench, outMult(r.out, false)*ef, idle);
+    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, hurt ? 0 : bench, outMult(r.out, false)*ef, idle);
     if(ef!==1) st.env = {f:ef, e:c.__env[r.team]};
     if(r.moved) st.moved = r.moved; if(r.out) st.out = r.out;
     st.dpE = dpE;
@@ -482,7 +491,8 @@ function rankAll(players, cfgIn, now, adj){
  // IR already carries its own, larger markdown, so short-injury math only applies off IR
     if(miss && !r.inj){ st.miss = miss; st.missF = 1 - PV[r.pos].inj*Math.min(1, miss/17); st.value *= st.missF; }   // games lost out of a season, at the position's injury cost
     const a = +adj[r.k]||0;
-    out.push({...r, st, base:st.value, adj:a, v: st.value*(1+a/100)});
+    if(w0!==r.w) st.hurtW = 1;
+    out.push({...r, w:w0, st, base:st.value, adj:a, v: st.value*(1+a/100)});
   });
   // team direction: within each position, players whose value comes sooner (win now) or later (rebuild) than the
   // position's typical top-40 player move up; the position's overall level stays put, so positions stay comparable
@@ -920,7 +930,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
       <div class="eq">(${fmt(st.ppg,2)} − ${fmt(st.R,2)}) × ${fmt(st.gl,1)} = ${fmt(r.base,1)}${r.adj ? ` → ${r.adj>0?'+':''}${r.adj}% → ${fmt(r.v,1)}` : ''}</div></div></div></div>
     ${canEdit ? html`<div class="sec"><span class="eyebrow">Owner tools</span><${InjOverride} r=${r} onSave=${onInj}/></div>` : null}
    </div></div>`;
-  const ws = [c.a1, 1, c.a3];
+  const ws = st.hurtW ? [1, (1+c.a1)/2, 1] : [c.a1, 1, c.a3];
   const maxY = Math.max(...st.yrs.map(y=>y.yv), 1);
   return html`<div class="scrim" onClick=${e=>{ if(e.target===e.currentTarget) onClose(); }}>
    <div class="sheet" role="dialog" aria-modal="true" aria-label=${r.n}>
@@ -1042,7 +1052,7 @@ function Method({M, meta}){
       <h3>3. Draft capital for young players</h3>
       <p class="sub">Draft slot sets where a thin record gets pulled to. It fades out as a player racks up games (gone after about two full seasons) and by age 26, so a bust first-rounder stops coasting on pedigree and a late-round breakout isn't held back by it. Rookies with no games start from draft slot alone. Once a season is underway, a rookie who still hasn't taken a snap is marked down (up to 20% by week 8), because someone is ahead of him; an early-round pick keeps a wide range of outcomes, so some upside survives.</p>
       <h3>Injuries</h3>
-      <p class="sub">IR, PUP and suspensions mark a player down by his position's injury cost. Shorter injuries come from the weekly injury report, injury news ("out 4–6 weeks") is checked automatically after every slate of games for hurt players who matter, and the owner can overrule it; either way it counts down a game a week: Out counts as about one more missed game plus three-quarters of a game for each straight week he's already been out; Doubtful 0.8, Questionable 0.25, a missed practice 0.3, and concussions add half a game. In dynasty that's a small markdown (games lost out of a season); in redraft those games come straight off the games he has left.</p>
+      <p class="sub">A season cut short by an injury a player is still out with doesn't get this season's extra weight: his last season stands in, and the few games he played count 1×. IR, PUP and suspensions mark a player down by his position's injury cost. Shorter injuries come from the weekly injury report, injury news ("out 4–6 weeks") is checked automatically after every slate of games for hurt players who matter, and the owner can overrule it; either way it counts down a game a week: Out counts as about one more missed game plus three-quarters of a game for each straight week he's already been out; Doubtful 0.8, Questionable 0.25, a missed practice 0.3, and concussions add half a game. In dynasty that's a small markdown (games lost out of a season); in redraft those games come straight off the games he has left.</p>
       <h3>Athleticism</h3>
       <p class="sub">A combine composite (size-adjusted speed counts double, then vertical, broad jump, 3-cone and shuttle, against players at the same position) nudges a young player's draft slot. It only counts where it has predicted fantasy points beyond draft slot: tested on the 2017–23 draft classes, it clearly helps at TE, a little at RB and QB, and not at WR. It fades out with draft slot as a player builds a record, and players who skipped drills are treated as average.</p>
       <h3>Depth chart</h3>
