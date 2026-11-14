@@ -681,7 +681,7 @@ function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine}
         <input id="search" class="search" type="search" placeholder="Search players" value=${q} onInput=${e=>setQ(e.target.value)}/>
       </div>
     </div>
-    ${isMove ? html`<p class="note">Change in value since week ${M.w30} (about 30 days of games), in your format and team direction. Production and age only; injuries aren't counted as a fall.</p>` : null}
+    ${isMove ? html`<p class="note">Movement against his position since week ${M.w30} (about 30 days of games): his value today minus what his position rank back then is worth today. Production and age only; injuries aren't counted as a fall.</p>` : null}
     ${red ? html`<p class="note">Redraft: value is rest-of-season points above a replacement starter in your lineup (${M.left} games left).${(M.cfg.sf||M.cfg.qb>=2) ? ' Expert consensus for redraft is 1QB only, so it is hidden in superflex.' : ''}</p>` : null}
     ${!isMove && hasEcr && M.ecrAt ? html`<p class="note">ECR = FantasyPros expert consensus (${M.redraft ? '1QB redraft' : (M.cfg.sf||M.cfg.qb>=2)?'superflex dynasty':'1QB dynasty'}, ${M.ecrAt}), for comparison only. ▲ means you have him higher than the experts do${posView?' at the position':''}.${isEcr ? ` Sorted by value gap: his value minus what your board pays for the spot the experts rank him at.` : ''}</p>` : null}
     ${isMine ? html`<div class="panel minesum">${mine.size ? html`<div class="tiles">
@@ -733,7 +733,7 @@ function Dashboard({M, D, cfg, mine, onOpen, go}){
         <div class="legend">${byPos.map(x=>html`<div key=${x.q}><span><i style=${{background:cols[x.q]}}></i>${x.q}</span><span class="mono">${x.n} · ${fmt(100*x.v/vTot)}%</span></div>`)}</div>
         <h3>Tiers</h3>
         <div class="ladder">${tiers.filter(Boolean).slice(0,10).map(t=>html`<div key=${t.t}><span class="lb">Tier ${t.t}</span><span class="tr"><i class=${t.t<=2?'g':''} style=${{width:(100*t.n/maxN)+'%'}}></i></span><span class="rg">${t.n} · ${fmt(t.hi)}–${fmt(t.lo)}</span></div>`)}</div></div>
-      ${ups.length ? html`<div class="panel s6"><h2>Movers · 30 days</h2><p class="sub">Value change since week ${M.w30}.</p>
+      ${ups.length ? html`<div class="panel s6"><h2>Movers · 30 days</h2><p class="sub">Value gained or lost against his position since week ${M.w30}.</p>
         <div class="twocol"><div><div class="eyebrow up" style=${{marginTop:8}}>Rising</div><${Mini} rows=${ups} onOpen=${onOpen} right=${r=>html`<span class="up">${sign(r.d30)}</span>`}/></div>
         <div><div class="eyebrow dn" style=${{marginTop:8}}>Falling</div><${Mini} rows=${downs} onOpen=${onOpen} right=${r=>html`<span class="dn">${sign(r.d30)}</span>`}/></div></div></div>` : null}
       ${above.length ? html`<div class="panel s6"><h2>Vs the experts</h2><p class="sub">Biggest value gaps against FantasyPros consensus (${M.ecrAt}).</p>
@@ -1038,6 +1038,10 @@ function Method({M, meta}){
       <p class="sub">IR, PUP and suspensions mark a player down by his position's injury cost. Shorter injuries come from the weekly injury report, injury news ("out 4–6 weeks") is checked automatically after every slate of games for hurt players who matter, and the owner can overrule it; either way it counts down a game a week: Out counts as about one more missed game plus three-quarters of a game for each straight week he's already been out; Doubtful 0.8, Questionable 0.25, a missed practice 0.3, and concussions add half a game. In dynasty that's a small markdown (games lost out of a season); in redraft those games come straight off the games he has left.</p>
       <h3>Athleticism</h3>
       <p class="sub">A combine composite (size-adjusted speed counts double, then vertical, broad jump, 3-cone and shuttle, against players at the same position) nudges a young player's draft slot. It only counts where it has predicted fantasy points beyond draft slot: tested on the 2017–23 draft classes, it clearly helps at TE, a little at RB and QB, and not at WR. It fades out with draft slot as a player builds a record, and players who skipped drills are treated as average.</p>
+      <h3>Depth chart</h3>
+      <p class="sub">For players from the last three draft classes, the board finds who he has to beat on his team (the starter at QB, RB and TE; the second receiver at WR). A strong incumbent makes him play like a later pick, an open path like an earlier one. On the 2008–23 draft classes this was clearest at RB, moderate at WR and TE and weak at QB, so each position is nudged in proportion, and it fades as he builds his own record.</p>
+      <h3>Offense strength</h3>
+      <p class="sub">Betting lines say how many points each team is expected to score (its next two games and last four, against the league average). From 2010 to 2024, players on better offenses beat their projections the next season. RBs, WRs and TEs get 2% per 10% of offense strength in dynasty; QBs are left out, because a team's lines mostly price its QB and that would count his own play twice. Redraft uses the full in-season effect for everyone. Players who are out, or haven't played this season, are skipped.</p>
       <h3>4. A career, not a season</h3>
       <p class="sub">The value adds up every future season: points above replacement, plus the worth of his upside outcomes, times the chance he's still a fantasy starter at that age. That chance falls off around age 30 for RBs, 33 for TEs, 36 for WRs and 39 for QBs. QB and RB years further out are discounted the most.</p>
       <h3>5. Your format sets replacement</h3>
@@ -1054,6 +1058,11 @@ function Method({M, meta}){
       <p class="sub">Tiers are cut where values naturally clump. The top 240 players (top 80 at a position) are split so players inside a tier are as close in value as possible, with the number of tiers set by the size of the list. Elite tiers come out small because values are spread out at the top; lower tiers hold more players because values bunch together. Everyone below is listed as depth.</p>
       <h3>Expert consensus</h3>
       <p class="sub">ECR is FantasyPros' dynasty expert consensus (via DynastyProcess), refreshed weekly with the stats. It sits next to each player so you can see where your board disagrees; it never feeds into a value.</p>
+      <h3>How well does it predict?</h3>
+      <p class="sub">The board was rebuilt as it would have looked after every season and at mid-season from 2008 to 2024, using only the games played by then, and scored on how well it ranked players by the points above replacement they actually produced over the next three to four years (1.0 = a perfect ranking). FantasyPros expert rankings from 2020 on went through the same test.</p>
+      <div class="tscroll"><table><thead><tr><th>Top 100 players</th><th>This board</th><th>Experts</th></tr></thead><tbody>
+        <tr><td>Running backs</td><td>0.47</td><td>0.46</td></tr><tr><td>Wide receivers</td><td>0.54</td><td>0.55</td></tr><tr><td>Tight ends</td><td>0.23</td><td>0.21</td></tr><tr><td>Quarterbacks</td><td>0.40</td><td>0.53</td></tr></tbody></table></div>
+      <p class="sub" style=${{marginTop:6}}>Level with the experts at RB, WR and TE; behind at QB, where the fixes that tested better all punish a proven QB's down year harder than this board is willing to. Snap share, target share and efficiency stats were tested too and added nothing beyond points per game.</p>
       <h3>The formula</h3>
       <div class="eq">PPG = (Σ w·pts + n·R) ÷ (Σ w·games + n)</div>
       <div class="eq">value = k × Σ<sub>years</sub> dʲ × alive(age) × [ (PPG − R)·Φ(z) + σ·φ(z) ],  z = (PPG − R) ÷ σ</div>
@@ -1184,7 +1193,10 @@ function App(){
       const past = players.map(p=> p.s30===undefined ? p : {...p, s:{...p.s, [S]:p.s30}});
       const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left, __env:(D.meta&&D.meta.env)||null}, then, adj), by = {};
       m0.rows.forEach(r=>by[r.k]=r);
-      m.rows.forEach(r=>{ const o = by[r.k]; if(o){ r.d30 = r.v - o.v; r.r30Overall = o.rank; } else if(r.s30!==undefined) r.d30 = r.v; });
+      // Trend = his value today minus what his position rank of 30 days ago is worth today. (Raw values drift up for
+      // everyone good as a season's games pile up, so a plain before/after would call nearly every star a riser.)
+      const lad = {}; POS.forEach(q=>lad[q] = m.rows.filter(r=>r.pos===q).map(r=>r.v));
+      m.rows.forEach(r=>{ const o = by[r.k]; if(o){ const L = lad[r.pos]; r.d30 = r.v - (L[Math.min(L.length, o.prank)-1] || 0); r.r30Overall = o.rank; r.p30 = o.prank; } else if(r.s30!==undefined) r.d30 = r.v; });
       m.w30 = w30;
     }
     return m;
