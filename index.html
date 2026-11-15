@@ -757,7 +757,7 @@ function Dashboard({M, D, cfg, mine, onOpen, go}){
   const sign = x => (x>0?'+':'')+fmt(x);
   const now = Date.now();
   return html`<div class="hero-strip"><div><div class="eyebrow">${fmtSummary(M.cfg)}</div><h1>${M.redraft ? 'Rest-of-season board' : 'Dynasty board'}</h1></div>
-      <div class="controls"><span class="chip"><span class="dot"></span>Stats through week ${D.meta && D.meta.wk || '–'} · ${ago(D.meta && D.meta.at)}</span><button class="btn primary" onClick=${()=>go('board')}>Full rankings</button></div></div>
+      <div class="controls"><span class="chip"><span class="dot"></span>Stats through week ${D.meta && D.meta.wk || '–'}${D.meta && D.meta.wkLive ? ` · week ${D.meta.wkLive.w}: ${D.meta.wkLive.done} of ${D.meta.wkLive.total} games in` : ''} · ${ago(D.meta && D.meta.at)}</span><button class="btn primary" onClick=${()=>go('board')}>Full rankings</button></div></div>
     <div class="kpis">
       <div class="kpi"><span class="eyebrow">Top asset</span><b>${R[0].n.split(' ').slice(-1)[0]}</b><em>${R[0].pos} · ${fmtV(R[0].v)} value</em></div>
       <div class="kpi"><span class="eyebrow">Elite tiers</span><b>${R.filter(r=>r.tier<=2).length}</b><em>players in tiers 1–2</em></div>
