@@ -481,7 +481,7 @@ function rankAll(players, cfgIn, now, adj){
     const hurt = !!r.inj || ovrLeft(r.ovr, now) >= 4;
     let w0 = r.w;
     if(hurt && r.w.den>0 && (!r.lines[0] || r.lines[0].g < 0.6*gS)){ const cQ = PV[r.pos], Lm = [S, S-1, S-2].map(y=>seasonPts(r.p.s&&r.p.s[y], r.pos, c, true)); let num=0, den=0, gms=0;
-      [[Lm[0],1],[Lm[1],(1+cQ.a1)/2],[Lm[2],1]].forEach(([l,wt])=>{ if(l&&l.g){ num+=wt*l.pts; den+=wt*l.g; gms+=l.g; } }); w0 = {num, den, gms, ppg: den>0?num/den:null}; }
+      [[Lm[0],Math.min(1,cQ.a1)],[Lm[1],Math.max(1,(1+cQ.a1)/2)],[Lm[2],cQ.a3]].forEach(([l,wt])=>{ if(l&&l.g){ num+=wt*l.pts; den+=wt*l.g; gms+=l.g; } }); w0 = {num, den, gms, ppg: den>0?num/den:null}; }
     const wv = r.moved ? {...w0, num:w0.num*MOVE_TRUST, den:w0.den*MOVE_TRUST} : w0;
     const ef = envF(c, r.team, r.pos, false, r, now);
     // a new team widens the range of outcomes only for a real contributor (a trade or signing into a role); a fringe
@@ -970,7 +970,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
       <div class="eq">(${fmt(st.ppg,2)} − ${fmt(st.R,2)}) × 17 × ${fmt(100*st.av,0)}% = ${fmt(r.base,1)}${r.adj ? ` → ${r.adj>0?'+':''}${r.adj}% → ${fmt(r.v,1)}` : ''}</div></div></div></div>
     ${canEdit ? html`<div class="sec"><span class="eyebrow">Owner tools</span><${InjOverride} r=${r} onSave=${onInj}/></div>` : null}
    </div></div>`;
-  const ws = st.hurtW ? [1, (1+c.a1)/2, 1] : [c.a1, 1, c.a3];
+  const ws = st.hurtW ? [Math.min(1,c.a1), Math.max(1,(1+c.a1)/2), c.a3] : [c.a1, 1, c.a3];
   const maxY = Math.max(...st.yrs.map(y=>y.yv), 1);
   return html`<div class="scrim" onClick=${e=>{ if(e.target===e.currentTarget) onClose(); }}>
    <div class="sheet" role="dialog" aria-modal="true" aria-label=${r.n}>
