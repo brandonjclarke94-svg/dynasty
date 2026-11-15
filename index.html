@@ -353,7 +353,8 @@ const envF = (c, team, pos, redraft, r, now) => { const e = c.__env && team ? c.
   if(r && r.lines && !(r.lines[0] && r.lines[0].g>0)) return 1;
   return 1 + Math.max(-0.12, Math.min(0.12, (redraft?ENVB.red:ENVB.dyn)[pos]*e)); };   // shrunk hard toward zero (a skeptical prior), so it only nudges
 const BENCH = 0.2;
-const ROOKSD = {QB:3, RB:1, WR:1, TE:1};   // QBs with no snaps carry a much wider range of outcomes than the fitted QB spread
+const ROOKSD = {QB:2.25, RB:1, WR:1, TE:1};   // QBs with little tape carry a much wider range of outcomes than the fitted QB spread
+const ROOKG = 8;   // games until that extra range is gone
 const GF = 2;   // seasons of games until draft slot stops counting
 const LEVEL = 22000;   // the top 200 dynasty values always add up to this
 const TEP0 = 0.5;   // the fitted values already price in a +0.5 TE premium
@@ -400,29 +401,32 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle)
   const youth = Math.max(0, Math.min(1, (26 - age)/3))*expF;     // draft slot stops mattering by about 26
   const target = R*Math.min(1.1, (c.tb!=null?c.tb:TGT.base) + rook*dcw*tdp*youth);
   st.target = target;
+  // one path from draft night on: a player with no games is simply an empty record, so the anchor alone. Nothing jumps on his first snap.
   if(w.den>0) ppg = (w.num + c.shr*target)/(w.den + c.shr);
-  else { // no NFL games yet: expectation from draft slot alone (pick 1 well above replacement, day-3 picks below it)
-    const t = dp ? Math.max(0, 1 - Math.log(dp)/Math.log(257)) : 0;
-    ppg = R*Math.min(1.1, (c.tb!=null?c.tb:TGT.base) + (c.rook!=null?c.rook:ROOK[Q])*dcw*t); st.rookie = true;
-    // not playing is information: deep into a season with no snaps means he's behind someone. Full markdown by week 8.
-    if(bench){ st.bench = BENCH*bench; ppg *= 1 - st.bench; } }
+  else { ppg = target; st.rookie = true; }
   // same idea for a veteran: healthy, on a roster, and no games at all this far into the season means he's buried
-  if(w.den>0 && idle){ st.idle = BENCH*idle; ppg *= 1 - st.idle; }
+  if(w.den>0 && idle && !bench){ st.idle = BENCH*idle; ppg *= 1 - st.idle; }
   st.shrunk = ppg;
-  if(w.den>0 && dp && age < 25.5 && c.lam >= 0.02){   // (QBs: the fit gave this ~no weight, so it's skipped)
+  if(dp && age < 25.5 && c.lam >= 0.02){   // (QBs: the fit gave this ~no weight, so it's skipped)
     const prior = Math.max(0, (c.dpA - 3.3*Math.log(dp))*sc);
     // pedigree fades with age and with games played: after about two full seasons, production does the talking
-    const l = Math.min(0.9, c.lam*dcw) * Math.min(1, (25.5-age)/3) * Math.max(0, 1 - w.gms/(GF*17));
-    ppg = (1-l)*ppg + l*prior; st.prior = prior; st.lam = l;
+    const l = Math.min(0.9, c.lam*dcw) * Math.min(1, (25.5-age)/3) * Math.max(0, 1 - (w.gms||0)/(GF*17));
+    ppg = (1-l)*ppg + l*prior; st.prior = prior; st.lam = l; st.lift = l*(prior - st.shrunk);
+    const l0 = Math.min(0.9, c.lam*dcw) * Math.min(1, (25.5-age)/3); st.base0 = (1-l0)*target + l0*prior;
   }
+  st.pre = ppg;
+  // a prospect sitting while the season goes on: someone is ahead of him. Eases off as he gets on the field.
+  if(bench){ st.bench = BENCH*bench; ppg *= 1 - st.bench; }
   if(om && om!==1){ st.preOut = ppg; ppg *= om; st.om = om; }   // situation change (new team, role, QB): expected scoring moved up or down
   st.ppg = ppg;
   // youth upside is earned by draft capital: a day-3 rookie doesn't carry a first-rounder's range of outcomes
   const yf = YF[Q] ? (dp ? Math.max(0.1, 1 - Math.log(dp)/Math.log(257)) : 0.3) : 1;
+  // an early pick with little NFL tape keeps a wider range of outcomes; it narrows game by game rather than vanishing at the first snap
+  const rf = dp && age < 25.5 ? Math.max(0, 1 - (w.gms||0)/ROOKG) : 0, rsd = 1 + (ROOKSD[Q]-1)*tdp*rf; st.rsd = rsd;
   let s=0, sm=0, surv=1; const yrs=[];
   for(let j=0;j<25;j++){
     const t = age+j; if(j>0) surv *= 1 - 1/(1+Math.exp(-(t-c.mid))); if(surv<0.01) break;
-    const sd = (st.rookie ? 1 + (ROOKSD[Q]-1)*tdp : 1)*c.sig*upside*md.up*sc*(1 + c.ys*yf*expF*Math.max(0,25-t)/3)*(1+0.15*j), z = (ppg-R)/sd;
+    const sd = rsd*c.sig*upside*md.up*sc*(1 + c.ys*yf*expF*Math.max(0,25-t)/3)*(1+0.15*j), z = (ppg-R)/sd;
     const yv = Math.pow(c.d,j)*surv*(sd*nPdf(z) + (ppg-R)*nCdf(z));
     s += yv; sm += md.yr(j)*yv; yrs.push({age:t, surv, yv:yv*c.k});
   }
@@ -488,7 +492,11 @@ function rankAll(players, cfgIn, now, adj){
     // player who was cut and picked up isn't a lottery ticket
     const contrib = r.moved && r.w.ppg!=null && r.w.ppg >= R[r.pos]*0.85;
     const idle = !r.inj && !(r.lines[0] && r.lines[0].g>0) && !ovrLeft(r.ovr, now) && !(r.rep && /Out|Doubtful/.test(r.rep.s||'')) ? bench : 0;
-    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, hurt ? 0 : bench, outMult(r.out, false)*ef, idle);
+    // no-snap markdown for prospects: only once he's on a team for that season (an incoming rookie in the offseason isn't
+    // 'benched'), and easing off as he plays; at half the team's games he's a regular and it's gone. Once he has played,
+    // it only carries on for players in their first two seasons with no injury listed (missed games could be an injury, not a depth chart)
+    const g0 = r.lines[0] ? r.lines[0].g : 0, pb = !hurt && r.dp && (r.w.gms||0) < 17 && !(r.dy && r.dy > S) && (!(r.lines[0] && r.lines[0].g) || (r.dy && r.dy >= S-1 && !r.rep)) ? bench*Math.max(0, 1 - g0/Math.max(1, gS/2)) : 0;
+    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, pb, outMult(r.out, false)*ef, idle);
     if(ef!==1) st.env = {f:ef, e:c.__env[r.team]};
     if(r.moved) st.moved = r.moved; if(r.out) st.out = r.out;
     st.dpE = dpE;
@@ -602,7 +610,7 @@ function pickBoard(rows, c, S, now){
 }
 // trade value: stars are worth more than the sum of parts
 function tradeVal(v, star){ return v>0 ? Math.pow(v, star) : 0; }
-if(typeof module!=='undefined') module.exports = {OUTLOOK,outMult,ovrLeft,expMiss,ATH,CLASS_LEVELS,ROOKSD,BENCH,MODES,TGT,ROOK,TEP0,REF,POS,F,DEF,PRESETS,PV,normName,seasonPts,weighted,lifetime,replacement,rankAll,tradeVal};
+if(typeof module!=='undefined') module.exports = {OUTLOOK,outMult,ovrLeft,expMiss,ATH,CLASS_LEVELS,ROOKSD,ROOKG,BENCH,MODES,TGT,ROOK,TEP0,REF,POS,F,DEF,PRESETS,PV,normName,seasonPts,weighted,lifetime,replacement,rankAll,tradeVal};
 
 /* ===== page ===== */
 const {useState, useEffect, useMemo, useRef} = React;
@@ -989,16 +997,19 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
       </tbody></table></div>
       <div class="eq">weighted PPG = Σ(weight × points) ÷ Σ(weight × games) = ${r.w.den ? fmt(r.w.ppg,2) : 'no games'}</div>
       ${r.pos==='TE' ? html`<p class="note" style=${{marginTop:6}}>For tight ends the formula reads ${TEP0} less per catch than you score, because its TE values already include a +${TEP0} premium.</p>` : null}</div></div>
-    <div class="step"><span class="n">2</span><div style=${{minWidth:0}}><div class="t">Pulled toward replacement</div>
-      ${st.rookie ? html`<p class="sub">No NFL games yet, so the starting point comes from draft slot: ${r.dp?'pick '+r.dp:'unknown'} → ${fmt(st.shrunk,2)} PPG, against a ${r.pos} replacement level of ${fmt(st.R,2)}.${st.bench ? ` He hasn't taken a snap this far into the season, so that's marked down ${fmt(100*st.bench,0)}%: someone is ahead of him.` : ''}${r.dp && r.dp<=64 ? ' An early pick with no snaps still has the widest range of outcomes, which keeps some upside in his value.' : ''}</p>`
-       : html`<p class="sub">His record gets ${fmt(c.shr,0)} phantom games at ${fmt(st.target,2)} PPG, which is what a ${r.pos} ${r.dp && r.ageNow<26 ? 'drafted at pick '+r.dp : 'like him'} usually scores (replacement here is ${fmt(st.R,2)}). A short or flukey record can't carry a player; a long one outweighs the phantom games.</p>
+    <div class="step"><span class="n">2</span><div style=${{minWidth:0}}><div class="t">${st.rookie ? 'Starting guess' : 'Padded with a starting guess'}</div>
+      ${st.rookie ? html`<p class="sub">No NFL games yet, so the record is empty and the starting guess is all there is: ${fmt(st.target,2)} PPG for a ${r.pos} ${r.dp?'taken at pick '+r.dp:'like him'} (replacement here is ${fmt(st.R,2)}). It's deliberately cautious${st.prior!=null && st.lam>0.005 ? '; draft slot adds to it in the next step' : ''}.</p>`
+       : html`<p class="sub">His record is padded with ${fmt(c.shr,0)} phantom games at ${fmt(st.target,2)} PPG, a deliberately cautious starting guess for a ${r.pos} ${r.dp && r.ageNow<26 ? 'taken at pick '+r.dp : 'like him'} (replacement here is ${fmt(st.R,2)}). It's a weight on his record, not a forecast: a short or flukey record can't carry a player, and a long one outweighs the phantom games.</p>
         <div class="eq">(${fmt(r.w.num,0)} + ${fmt(c.shr,0)} × ${fmt(st.target,2)}) ÷ (${fmt(r.w.den,1)} + ${fmt(c.shr,0)}) = ${fmt(st.shrunk,2)}</div>`}</div></div>
     ${st.prior!=null && st.lam>0.005 ? html`<div class="step"><span class="n">3</span><div style=${{minWidth:0}}><div class="t">Draft capital</div>
-      <p class="sub">Until about two full seasons of games, draft slot also blends into his PPG, fading as he plays. Pick ${r.dp} implies ${fmt(st.prior,2)} PPG, given ${fmt(100*st.lam,0)}% weight.</p>
-      <div class="eq">${fmt(1-st.lam,2)} × ${fmt(st.shrunk,2)} + ${fmt(st.lam,2)} × ${fmt(st.prior,2)} = ${fmt(st.ppg,2)} PPG</div></div></div>` : null}
+      <p class="sub">The backtest found that young high picks keep beating that cautious guess, so draft slot adds a pull on top. For pick ${r.dp} the pull aims at ${fmt(st.prior,2)}, with ${fmt(100*st.lam,0)}% weight that fades to nothing over his first two seasons of games. ${fmt(st.prior,2)} is the lever the fit settled on, not a PPG forecast. What it actually adds here is ${st.lift>=0?'+':''}${fmt(st.lift,2)} PPG.</p>
+      <div class="eq">${fmt(1-st.lam,2)} × ${fmt(st.shrunk,2)} + ${fmt(st.lam,2)} × ${fmt(st.prior,2)} = ${fmt(st.pre,2)} PPG</div>
+      ${st.base0!=null && !st.rookie ? html`<p class="note" style=${{marginTop:6}}>Steps 2 and 3 together, before he'd played a snap: a ${r.pos} taken at pick ${r.dp} started at ${fmt(st.base0,2)} PPG. His games since have moved him to ${fmt(st.pre,2)}.</p>` : null}</div></div>` : null}
     <div class="step"><span class="n">${st.prior!=null && st.lam>0.005?4:3}</span><div style=${{minWidth:0}}><div class="t">Career, year by year</div>
       <p class="sub">Each future season counts what he scores above replacement, plus the upside of his good outcomes, times the chance he's still a fantasy ${r.pos} at that age${c.d<1?', discounted '+fmt(100*(1-c.d),0)+'% a year':''}.</p>
       <p class="note" style=${{marginTop:6}}>The curve is in the Profile section above.</p>
+      ${st.bench ? html`<p class="sub" style=${{marginTop:8}}>${st.rookie ? 'He hasn\'t taken a snap' : `He's played ${r.lines[0]?r.lines[0].g:0} game${r.lines[0] && r.lines[0].g===1 ? '' : 's'}`} this far into the season, so his expected scoring is marked down ${fmt(100*st.bench,0)}% (${fmt(st.pre,2)} → ${fmt(st.ppg,2)} PPG): someone is ahead of him. The markdown shrinks with every game he plays.</p>` : null}
+      ${st.rsd>1.01 ? html`<p class="sub" style=${{marginTop:8}}>An early-pick QB with little NFL tape has a wider range of outcomes, so his spread is ×${fmt(st.rsd,2)}. That keeps upside in his value, and it narrows with each game he plays (gone after ${ROOKG}) instead of vanishing at his first snap.</p>` : null}
       ${st.idle ? html`<p class="sub" style=${{marginTop:8}}>Healthy but no games this season: his expected scoring is marked down ${fmt(100*st.idle,0)}%, the same way a rookie who hasn't taken a snap is.</p>` : null}
       ${st.inj ? html`<p class="sub" style=${{marginTop:8}}>Currently ${r.inj}: value marked down ${fmt(100*st.inj,0)}%.</p>` : null}
       ${st.miss && st.ovr ? html`<p class="sub" style=${{marginTop:8}}>Injury news: out about ${fmt(st.miss,0)} more games${st.ovr.note?' ('+st.ovr.note+')':''}, so value is marked down ${fmt(100*(1-st.missF),1)}%. A few missed games barely touch a dynasty value.</p>` : null}
@@ -1090,7 +1101,7 @@ function Method({M, meta}){
       <h3>2. Pulled toward replacement</h3>
       <p class="sub">A player's average gets blended with phantom games at the level a player like him usually reaches: near replacement for an early first-round pick, well below it for a late-round or undrafted player. A hot few weeks can't vault a backup past a proven starter, and a backup with one start can't coast on being young. QBs get the most phantom games (see the table) because one QB season says the least about the next.</p>
       <h3>3. Draft capital for young players</h3>
-      <p class="sub">Draft slot sets where a thin record gets pulled to. It fades out as a player racks up games (gone after about two full seasons) and by age 26, so a bust first-rounder stops coasting on pedigree and a late-round breakout isn't held back by it. Rookies with no games start from draft slot alone. Once a season is underway, a rookie who still hasn't taken a snap is marked down (up to 20% by week 8), because someone is ahead of him; an early-round pick keeps a wide range of outcomes, so some upside survives.</p>
+      <p class="sub">Draft slot sets where a thin record gets pulled to. It fades out as a player racks up games (gone after about two full seasons) and by age 26, so a bust first-rounder stops coasting on pedigree and a late-round breakout isn't held back by it. A rookie with no games runs through the exact same math with an empty record, so nothing jumps or drops the day he takes his first snap. Once a season is underway, a young player who isn't getting on the field is marked down (up to 20% by week 8), because someone is ahead of him; the markdown shrinks with each game he plays and is gone once he's played half his team's games. Incoming rookies aren't marked down in the offseason. Early-pick QBs with little tape keep a wider range of outcomes (×2.25 for pick 1, less for later picks), which narrows over their first 8 games.</p>
       <h3>Injuries</h3>
       <p class="sub">A season cut short by an injury a player is still out with doesn't get this season's extra weight: his last season stands in, and the few games he played count 1×. IR, PUP and suspensions mark a player down by his position's injury cost. Shorter injuries come from the weekly injury report, injury news ("out 4–6 weeks") is checked automatically after every slate of games for hurt players who matter, and the owner can overrule it; either way it counts down a game a week: Out counts as about one more missed game plus three-quarters of a game for each straight week he's already been out; Doubtful 0.8, Questionable 0.25, a missed practice 0.3, and concussions add half a game. In dynasty that's a small markdown (games lost out of a season); in redraft those games come straight off the games he has left.</p>
       <h3>Athleticism</h3>
