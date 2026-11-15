@@ -355,6 +355,7 @@ const envF = (c, team, pos, redraft, r, now) => { const e = c.__env && team ? c.
 const BENCH = 0.2;
 const ROOKSD = {QB:3, RB:1, WR:1, TE:1};   // QBs with no snaps carry a much wider range of outcomes than the fitted QB spread
 const GF = 2;   // seasons of games until draft slot stops counting
+const LEVEL = 22000;   // the top 200 dynasty values always add up to this
 const TEP0 = 0.5;   // the fitted values already price in a +0.5 TE premium
 const DEPTH = 1.15;   // replacement sits a little below the last starter (bench depth)
 // the format the shape was fitted in: 12 teams, superflex, full PPR, +0.5 TE premium
@@ -447,7 +448,7 @@ function rankAll(players, cfgIn, now, adj){
   const c = {...DEF, ...cfgIn}; adj = adj||{};
   let S = 0; players.forEach(p=>Object.keys(p.s||{}).forEach(y=>{ if(p.s[y] && p.s[y][0]>0) S=Math.max(S,+y); }));
   let gS0 = 0; players.forEach(p=>{ const a = p.s && p.s[S]; if(a && a[0]>gS0) gS0 = a[0]; });
-  const fS = Math.min(1, gS0/17);   // share of the latest season played
+  const fS = 1;   // season weights stay reactive (the backtest prefers it); the level is held steady below instead
   const rows = players.filter(p=>POS.includes(p.pos)).map(p=>{
     const lines = [S, S-1, S-2].map(y=>seasonPts(p.s&&p.s[y], p.pos, c));          // what he scored, your scoring
     const w = weighted([S, S-1, S-2, S-3].map(y=>seasonPts(p.s&&p.s[y], p.pos, c, true)), p.pos, fS);   // what the formula reads
@@ -506,6 +507,12 @@ function rankAll(players, cfgIn, now, adj){
     const avg = top.reduce((a,r)=>a+r.st.tilt,0)/Math.max(1,top.length);
     xs.forEach(r=>{ const f = avg>0 ? r.st.tilt/avg : 1; r.modeF = f; r.base *= f; r.v = r.base*(1+(r.adj||0)/100); });
   });
+  // Hold the league's overall level steady. The board's raw numbers rise and fall together through a season (early on,
+  // each player has fewer games at full weight, so everyone is pulled further toward average), which would show up as
+  // the whole board dropping in week 1 and climbing back. Scaling every value so the top 200 always add up to the same
+  // total removes that common swing; ranks and trade ratios are untouched, and real risers and fallers still move.
+  { const tot = [...out].sort((a,b)=>b.v-a.v).slice(0,200).reduce((a,r)=>a+r.v,0), f = tot>0 ? LEVEL/tot : 1;
+    out.forEach(r=>{ r.v*=f; r.base*=f; r.st = {...r.st, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})), lvl:f}; }); }
   return finishBoard(out, c, cfgIn, R, N, S, now, {});
 }
 function finishBoard(out, c, cfgIn, R, N, S, now, extra){
@@ -527,22 +534,29 @@ function finishBoard(out, c, cfgIn, R, N, S, now, extra){
 // ---- Redraft: rest-of-season points above replacement ----
 // This season is the evidence; last season counts a little (up to 6 games at half weight); four phantom games at replacement
 // keep small samples honest. Replacement comes straight from your lineup. Value = (expected PPG - replacement) x games left.
+// Volume. Points per touch (carry + target) at each position this season, your scoring. Over the rest of a season,
+// touches predict scoring beyond points per game (2013-25: rest-of-season R² up 0.03-0.06 for RB/WR/TE), because TDs and
+// long plays regress and the work doesn't. Not used for dynasty: it didn't predict next season beyond points per game.
+const VOLB = {QB:0, RB:0.4, WR:0.4, TE:0.5};
+function volK(rows, S){ const k = {}; POS.forEach(q=>{ let pts=0, n=0; rows.forEach(r=>{ if(r.pos!==q) return; const l=r.lines&&r.lines[0], a=r.p&&r.p.s&&r.p.s[S]; if(l && l.g>=3 && Array.isArray(a)){ pts+=l.pts; n+=a[5]+a[8]; } }); k[q] = n>0 ? pts/n : 0; }); return k; }
+function volOf(r, S, k){ const l=r.lines&&r.lines[0], a=r.p&&r.p.s&&r.p.s[S]; if(!l || !l.g || !Array.isArray(a) || !k[r.pos]) return null; const tpg=(a[5]+a[8])/l.g; return {tpg, car:a[5]/l.g, tg:a[8]/l.g, x:tpg*k[r.pos]}; }
 function redraftAll(rows, c, S, gS, nowR){
   const cands = rows.filter(r=>r.lines[0] && r.lines[0].g>=3).map(r=>({pos:r.pos, ppg:r.lines[0].ppg}));
-  const {R, N} = replacement(cands, c);
+  const {R, N} = replacement(cands, c), kV = volK(rows, S);
   const left = c.__left!=null ? c.__left : Math.max(0, 17 - gS), out = [];   // __left: compare past and present over the same games
   rows.forEach(r=>{
     const l1 = r.lines[0], l2 = r.lines[1];
     if(!l1 && !(l2 && r.ageNow!=null)) return;
     const g1 = l1 ? l1.g : 0, w2 = l2 ? 0.5*Math.min(l2.g, 6) : 0;
+    const vo = volOf(r, S, kV), p1 = l1 ? (vo && VOLB[r.pos] ? (1-VOLB[r.pos])*l1.ppg + VOLB[r.pos]*vo.x : l1.ppg) : 0;
     const tr = r.moved ? MOVE_TRUST : 1;   // new team: his old numbers count a bit less
-    const ppg0 = (tr*g1*(l1?l1.ppg:0) + tr*w2*(l2?l2.ppg:0) + 4*R[r.pos]*0.9) / (tr*g1 + tr*w2 + 4), ef = envF(c, r.team, r.pos, true, r, nowR), om = outMult(r.out, true)*ef, ppg = ppg0*om;
+    const ppg0 = (tr*g1*p1 + tr*w2*(l2?l2.ppg:0) + 4*R[r.pos]*0.9) / (tr*g1 + tr*w2 + 4), ef = envF(c, r.team, r.pos, true, r, nowR), om = outMult(r.out, true)*ef, ppg = ppg0*om;
     const ov = ovrLeft(r.ovr, nowR), miss = Math.max(ov, r.inj ? 0 : expMiss(r.rep)), gl = ov ? Math.max(0, left - ov) : r.inj ? left*0.4 : Math.max(0, left - miss);
     // On a full-season scale: points above replacement per game x 17, times the share of the remaining games he's
     // expected to play. Values stay put from week to week; only injuries, form and role move them.
     const av = left>0 ? gl/left : (r.inj ? 0.4 : 1);
     const base = Math.max(0, ppg - R[r.pos]) * 17 * av;
-    out.push({...r, st:{redraft:true, ppg, preOut:ppg0, om, moved:r.moved, out:r.out, R:R[r.pos], gl, av, g1, w2, miss, ovr: ov ? r.ovr : null, raw: av>0 ? (ppg - R[r.pos])*av : -1e6 + ppg}, base, v: base*(1+(+r.adj||0)/100)});
+    out.push({...r, st:{redraft:true, ppg, p1, vol:vo, preOut:ppg0, om, moved:r.moved, out:r.out, R:R[r.pos], gl, av, g1, w2, miss, ovr: ov ? r.ovr : null, raw: av>0 ? (ppg - R[r.pos])*av : -1e6 + ppg}, base, v: base*(1+(+r.adj||0)/100)});
   });
   return {out, R, N, left};
 }
@@ -819,6 +833,23 @@ function SheetHead({r, M, onClose, starred, onStar, sub}){
     </div>`;
 }
 // Big changes: team moves (automatic) and outlook notes (owner, or the twice-weekly news check)
+// Role & volume: what the work says, separate from what the points say
+const VK = new WeakMap();
+function RoleVolume({r, M}){
+  if(!r.lines || !r.lines[0] || !r.lines[0].g || r.pos==='QB') return null;
+  let k = VK.get(M); if(!k){ k = volK(M.rows, M.season); VK.set(M, k); }
+  const v = volOf(r, M.season, k); if(!v) return null;
+  const l = r.lines[0], wk = r.p && r.p.wk ? Object.entries(r.p.wk).map(([w,a])=>[+w,a]).sort((a,b)=>a[0]-b[0]) : [];
+  const last = wk.slice(-3), lt = last.length ? last.reduce((a,[,x])=>a+x[5]+x[8],0)/last.length : null;
+  const early = wk.slice(0, -3), et = early.length ? early.reduce((a,[,x])=>a+x[5]+x[8],0)/early.length : null;
+  const oe = l.ppg - v.x, trend = lt!=null && et!=null ? lt - et : null;
+  const peers = M.rows.filter(x=>x.pos===r.pos && x.lines && x.lines[0] && x.lines[0].g>=3).map(x=>volOf(x, M.season, k)).filter(Boolean).map(x=>x.tpg).sort((a,b)=>b-a);
+  const rk = peers.findIndex(x=>x<=v.tpg)+1;
+  return html`<div class="step"><span class="n">◎</span><div style=${{minWidth:0}}><div class="t">Role & volume</div>
+    <p class="sub">${fmt(v.tpg,1)} touches a game (${fmt(v.car,1)} carries, ${fmt(v.tg,1)} targets), ${r.pos}${rk||'–'} in volume among ${r.pos}s with 3+ games.${trend!=null && Math.abs(trend)>=1.5 ? ` Last ${last.length} games: ${fmt(lt,1)} a game, ${trend>0?'up':'down'} ${fmt(Math.abs(trend),1)} from ${fmt(et,1)} before that.` : lt!=null ? ` Steady lately (${fmt(lt,1)} a game over his last ${last.length}).` : ''}</p>
+    <p class="sub">That work is worth ${fmt(v.x,1)} PPG at an average ${r.pos}'s rate; he's scoring ${fmt(l.ppg,1)}, so ${Math.abs(oe)<1 ? 'right in line with his volume' : oe>0 ? `${fmt(oe,1)} a game above his volume (efficiency or touchdowns, which tend to cool)` : `${fmt(-oe,1)} a game below his volume (touchdowns or big plays that tend to come)`}.${M.redraft ? ` Redraft leans ${Math.round(VOLB[r.pos]*100)}% on volume for this season's PPG.` : ' Dynasty values go by points per game: volume hasn\'t predicted next season beyond it.'}</p>
+  </div></div>`;
+}
 function Situation({r, M, canEdit, onSave}){
   const st = r.st, o = r.out;
   const [f, setF] = useState(o && o.f || 0), [note, setNote] = useState((o&&o.note)||'');
@@ -924,7 +955,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
    <div class="sheet" role="dialog" aria-modal="true" aria-label=${r.n}>
     <${SheetHead} r=${r} M=${M} onClose=${onClose} starred=${starred} onStar=${onStar} sub=${'rest of season'}/>
     <div class="sec"><span class="eyebrow">Production</span><div class="charts"><${ValueHistory} r=${r} H=${H}/><${PpgChart} r=${r} M=${M}/></div></div>
-    <div class="sec"><span class="eyebrow">Situation</span><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/></div>
+    <div class="sec"><span class="eyebrow">Situation</span><${RoleVolume} r=${r} M=${M}/><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/></div>
     <div class="sec"><span class="eyebrow">How the value is built</span>
     <div class="step"><span class="n">1</span><div style=${{minWidth:0}}><div class="t">This season and last, your scoring</div>
       <div class="tscroll"><table><thead><tr><th>Season</th><th>G</th><th>PPG</th><th>Counts as</th></tr></thead><tbody>
@@ -946,7 +977,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
     <${SheetHead} r=${r} M=${M} onClose=${onClose} starred=${starred} onStar=${onStar} sub=${r.tier===99?'depth':'tier '+r.tier}/>
     <p class="note">${fmtSummary(M.cfg)}. ${r.dp ? 'Drafted pick '+r.dp+' overall.' : 'Draft slot unknown.'}${r.ecrRank ? ` Expert consensus #${r.ecrRank} (${r.pos}${r.ecrPos}), for comparison only.` : ''}</p>
     <div class="sec"><span class="eyebrow">Profile</span><div class="charts"><${ValueHistory} r=${r} H=${H}/><${PpgChart} r=${r} M=${M}/><${CareerChart} r=${r}/></div></div>
-    <div class="sec"><span class="eyebrow">Situation</span><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/>
+    <div class="sec"><span class="eyebrow">Situation</span><${RoleVolume} r=${r} M=${M}/><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/>
     ${r.ath!=null && r.pos!=='WR' ? html`<p class="sub">Athleticism: ${r.ath>=0?'+':''}${fmt(r.ath,1)} SD vs ${r.pos}s at the combine.</p>` : null}
     ${r.comp ? html`<p class="sub">Depth chart: ${r.comp[1] ? `the ${r.pos==='WR'?'WR2':r.pos+'1'} he has to beat on ${r.team} is ${r.comp[1]} (${fmt(r.comp[2],1)} PPG)` : `no established ${r.pos} ahead of him on ${r.team}`}, ${r.comp[0]>=0.5?'a crowded room':r.comp[0]<=-0.5?'an open path':'a typical room'} (${r.comp[0]>=0?'+':''}${fmt(r.comp[0],1)} SD).</p>` : null}
     ${r.dp && st.dpE && Math.abs(st.dpE-r.dp)>=0.5 && (r.ath!=null || r.comp) ? html`<p class="sub">While draft slot still counts for him, ${r.ath!=null && r.pos!=='WR' && r.comp ? 'athleticism and depth chart together make him' : r.comp ? 'the depth chart makes him' : 'that makes him'} play like pick ${fmt(st.dpE)} instead of ${r.dp}.</p>` : null}
@@ -1055,7 +1086,7 @@ function Method({M, meta}){
   return html`<div class="panel"><h2>How a value is built</h2>
       <p>Every number on this board comes from one formula run over each player's real game logs. Nothing is copied from another site's rankings.</p>
       <h3>1. Production, scored your way</h3>
-      <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight. The handover is gradual: in week 1 the weights are still last season's, and they shift game by game until the new season is complete, so values don't jump when a season starts. Running backs lean hardest on this season (3.8× a game), because roles at RB change fastest and the backtest ranks RBs better that way.</p>
+      <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight. Values are scaled so the top 200 always add up to the same total: when a new season starts and everyone's sample resets, the whole board doesn't drop; only players who really rise or fall move. Running backs lean hardest on this season (3.8× a game), because roles at RB change fastest and the backtest ranks RBs better that way.</p>
       <h3>2. Pulled toward replacement</h3>
       <p class="sub">A player's average gets blended with phantom games at the level a player like him usually reaches: near replacement for an early first-round pick, well below it for a late-round or undrafted player. A hot few weeks can't vault a backup past a proven starter, and a backup with one start can't coast on being young. QBs get the most phantom games (see the table) because one QB season says the least about the next.</p>
       <h3>3. Draft capital for young players</h3>
@@ -1077,7 +1108,7 @@ function Method({M, meta}){
       <h3>Big changes</h3>
       <p class="sub">The numbers can't see a trade or a new depth chart coming, so two things cover it. A player who changes teams (trade, signing or release) is flagged automatically: his old numbers count 25% less and his range of outcomes widens until he builds a record in the new offense. And an outlook (much worse, worse, better, much better) moves his expected scoring by 9 or 18%; dynasty uses 60% of that, since situations change again. Outlooks are set by the news check after each slate of games for players who changed teams or lost a key teammate for the season, and the board's owner can set or overrule any of them.</p>
       <h3>Redraft</h3>
-      <p class="sub">Switching to redraft swaps the career math for this season only: this season's PPG (plus up to six games of last season at half weight, plus four phantom games just under replacement), minus a replacement starter in your lineup, on a full-season scale (× 17 games) so values don't shrink as weeks pass. Expected missed games come off as a share of the games left; injured players count 40%.</p>
+      <p class="sub">Switching to redraft swaps the career math for this season only: this season's PPG (plus up to six games of last season at half weight, plus four phantom games just under replacement), with RB/WR/TE scoring blended 40–50% toward what their touches are worth at their position (volume predicts the rest of a season beyond points per game), minus a replacement starter in your lineup, on a full-season scale (× 17 games) so values don't shrink as weeks pass. Expected missed games come off as a share of the games left; injured players count 40%.</p>
       <h3>Team direction</h3>
       <p class="sub">Win now weights this season 1.6×, next season 1.2×, and later seasons less each year; rebuild weights this season 0.35×, next 0.9× and every season after 1.15×. A player moves up or down against the typical top-40 player at his position, so a 31-year-old RB climbs in win-now and slides in rebuild while positions stay comparable. Win now also trims what upside is worth and makes future picks feel further away; rebuild does the opposite.</p>
       <h3>Tiers</h3>
