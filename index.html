@@ -294,7 +294,7 @@ td{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink2)
 /* ===== Dynasty Value Board engine (pure functions, no DOM) ===== */
 const POS = ['QB','RB','WR','TE'];
 // one season of raw stats, stored as an array to keep the database small
-const F = ['g','att','py','ptd','pint','car','ry','rtd','tg','rec','recy','rectd','fl','fdP','fdR','fdU','sk'];
+const F = ['g','att','py','ptd','pint','car','ry','rtd','tg','rec','recy','rectd','fl','fdP','fdR','fdU','sk','gx'];   // gx: hundredths of a game taken off for partial games (snap counts)
 const DEF = { teams:12, qb:1, rb:2, wr:3, te:1, flex:1, sf:1,
   ppr:1, tep:0.5, ptd:4, pyd:25, int:-2, fl:-2, fd:0, upside:1, dcw:1, star:1.15, mode:'neutral', league:'dynasty', athw:1 };
 const PRESETS = {
@@ -371,7 +371,9 @@ function seasonPts(a, pos, c, model){
   if(c.fd) p += (s.fdR+s.fdU)*c.fd;
   if(c.sack) p += s.sk*c.sack;   // points per sack taken (e.g. UFFA: -0.5)
   if(c.fdRec||c.fdRush||c.fdPass) p += s.fdR*(c.fdRec||0) + s.fdU*(c.fdRush||0) + s.fdP*(c.fdPass||0);   // first downs scored by type (e.g. UFFA: catch 1, run 0.5, pass 0.2)
-  return {g:s.g, pts:p, ppg:p/s.g};
+  // a game he left early (under 35% of his usual snap share) counts as the share he played: g is game-equivalents, gn the count
+  const ge = Math.max(0.05, s.g - (s.gx||0)/100);
+  return {g:ge, gn:s.g, gx:(s.gx||0)/100, pts:p, ppg:p/ge};
 }
 function nPdf(z){ return Math.exp(-z*z/2)/Math.sqrt(2*Math.PI); }
 function nCdf(z){ const t=1/(1+0.2316419*Math.abs(z)); const d=0.3989423*Math.exp(-z*z/2); const pr=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274)))); return z>0?1-pr:pr; }
@@ -836,7 +838,7 @@ function SheetHead({r, M, onClose, starred, onStar, sub}){
       <div class="hero"><span>Value</span><b>${fmt(r.v)}</b><em>${sub}${r.d30!=null && Math.abs(r.d30)>=0.5 ? html` · <span class=${r.d30>0?"up":"dn"}>${r.d30>0?"+":""}${fmt(r.d30)} in 30 days</span>` : null}</em></div>
       <div><span>Rank</span><b>#${r.rank}</b><em>${r.pos}${r.prank}</em></div>
       <div><span>Age</span><b>${fmt(r.ageNow,1)}</b><em>${r.dy ? r.dy+' class' : ''}</em></div>
-      <div><span>This season</span><b>${l ? fmt(l.ppg,1) : '–'}</b><em>${l ? l.g+' games, ppg' : 'no games'}</em></div>
+      <div><span>This season</span><b>${l ? fmt(l.ppg,1) : '–'}</b><em>${l ? l.gn+' games, ppg' : 'no games'}</em></div>
       <div><span>ECR</span><b>${r.ecrRank ? '#'+r.ecrRank : '–'}</b><em>${r.ecrRank ? r.pos+r.ecrPos : 'not ranked'}</em></div>
     </div>`;
 }
@@ -883,7 +885,7 @@ function PpgChart({r, M}){
       ${L.map((x,i)=>{ const v = x.l ? x.l.ppg : 0, h = (H-18)*v/mx, X = gap+i*(bw+gap); return html`<g key=${x.y}>
         <rect x=${X} y=${H-h} width=${bw} height=${Math.max(h,1)} rx="4" fill=${i===2?'var(--accent)':'var(--line2)'}/>
         <text x=${X+bw/2} y=${H-h-5} text-anchor="middle" fill="var(--ink2)">${x.l ? fmt(v,1) : '–'}</text>
-        <text x=${X+bw/2} y=${H+13} text-anchor="middle">${x.y}${x.l ? ' · '+x.l.g+'g' : ''}</text></g>`; })}
+        <text x=${X+bw/2} y=${H+13} text-anchor="middle">${x.y}${x.l ? ' · '+x.l.gn+'g' : ''}</text></g>`; })}
     </svg></div>`;
 }
 function CareerChart({r}){
@@ -968,7 +970,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
     <div class="step"><span class="n">1</span><div style=${{minWidth:0}}><div class="t">This season and last, your scoring</div>
       <div class="tscroll"><table><thead><tr><th>Season</th><th>G</th><th>PPG</th><th>Counts as</th></tr></thead><tbody>
       <tr><td>${S}</td><td>${st.g1}</td><td>${r.lines[0]?fmt(r.lines[0].ppg,1):'–'}</td><td>${st.g1} games</td></tr>
-      <tr><td>${S-1}</td><td>${r.lines[1]?r.lines[1].g:0}</td><td>${r.lines[1]?fmt(r.lines[1].ppg,1):'–'}</td><td>${fmt(st.w2,1)} games</td></tr></tbody></table></div></div></div>
+      <tr><td>${S-1}</td><td>${r.lines[1]?r.lines[1].gn:0}</td><td>${r.lines[1]?fmt(r.lines[1].ppg,1):'–'}</td><td>${fmt(st.w2,1)} games</td></tr></tbody></table></div></div></div>
     <div class="step"><span class="n">2</span><div style=${{minWidth:0}}><div class="t">Rest-of-season PPG</div>
       <p class="sub">Four phantom games just under replacement keep a hot or cold few weeks from deciding everything.</p>
       <div class="eq">expected PPG = ${fmt(st.ppg,2)} · replacement ${r.pos} = ${fmt(st.R,2)}</div></div></div>
@@ -993,9 +995,10 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
     <div class="sec"><span class="eyebrow">How the value is built</span>
     <div class="step"><span class="n">1</span><div style=${{minWidth:0}}><div class="t">Production under your scoring</div>
       <div class="tscroll"><table><thead><tr><th>Season</th><th>G</th><th>Pts</th><th>PPG</th><th>Weight</th></tr></thead><tbody>
-      ${[S,S-1,S-2].map((y,i)=>{ const l = r.lines[i]; return html`<tr key=${y}><td>${y}</td><td>${l?l.g:0}</td><td>${l?fmt(l.pts,1):'–'}</td><td>${l?fmt(l.ppg,1):'–'}</td><td>${fmt(ws[i],2)}×</td></tr>`; })}
+      ${[S,S-1,S-2].map((y,i)=>{ const l = r.lines[i]; return html`<tr key=${y}><td>${y}</td><td>${l?(l.gx>0.005 ? fmt(l.g,1) : l.gn):0}</td><td>${l?fmt(l.pts,1):'–'}</td><td>${l?fmt(l.ppg,1):'–'}</td><td>${fmt(ws[i],2)}×</td></tr>`; })}
       </tbody></table></div>
       <div class="eq">weighted PPG = Σ(weight × points) ÷ Σ(weight × games) = ${r.w.den ? fmt(r.w.ppg,2) : 'no games'}</div>
+      ${r.p && r.p.px ? (()=>{ const L = []; [S,S-1,S-2].forEach(y=>Object.entries((r.p.px[y])||{}).sort((a,b)=>a[0]-b[0]).forEach(([w,[sh,u]])=>L.push(`${y} week ${w}: ${fmt(100*sh,0)}% of snaps (usually ${fmt(100*u,0)}%), counts as ${fmt(Math.max(0.05, sh/u),2)} of a game`))); return L.length ? html`<p class="note" style=${{marginTop:6}}>Left early: ${L.join('; ')}. A game he was barely on the field for counts only as the share he played, so a few snaps don't drag down (or prop up) his average.</p>` : null; })() : null}
       ${r.pos==='TE' ? html`<p class="note" style=${{marginTop:6}}>For tight ends the formula reads ${TEP0} less per catch than you score, because its TE values already include a +${TEP0} premium.</p>` : null}</div></div>
     <div class="step"><span class="n">2</span><div style=${{minWidth:0}}><div class="t">${st.rookie ? 'Starting guess' : 'Padded with a starting guess'}</div>
       ${st.rookie ? html`<p class="sub">No NFL games yet, so the record is empty and the starting guess is all there is: ${fmt(st.target,2)} PPG for a ${r.pos} ${r.dp?'taken at pick '+r.dp:'like him'} (replacement here is ${fmt(st.R,2)}). It's deliberately cautious${st.prior!=null && st.lam>0.005 ? '; draft slot adds to it in the next step' : ''}.</p>`
@@ -1008,7 +1011,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
     <div class="step"><span class="n">${st.prior!=null && st.lam>0.005?4:3}</span><div style=${{minWidth:0}}><div class="t">Career, year by year</div>
       <p class="sub">Each future season counts what he scores above replacement, plus the upside of his good outcomes, times the chance he's still a fantasy ${r.pos} at that age${c.d<1?', discounted '+fmt(100*(1-c.d),0)+'% a year':''}.</p>
       <p class="note" style=${{marginTop:6}}>The curve is in the Profile section above.</p>
-      ${st.bench ? html`<p class="sub" style=${{marginTop:8}}>${st.rookie ? 'He hasn\'t taken a snap' : `He's played ${r.lines[0]?r.lines[0].g:0} game${r.lines[0] && r.lines[0].g===1 ? '' : 's'}`} this far into the season, so his expected scoring is marked down ${fmt(100*st.bench,0)}% (${fmt(st.pre,2)} → ${fmt(st.ppg,2)} PPG): someone is ahead of him. The markdown shrinks with every game he plays.</p>` : null}
+      ${st.bench ? html`<p class="sub" style=${{marginTop:8}}>${st.rookie ? 'He hasn\'t taken a snap' : `He's played ${r.lines[0]?r.lines[0].gn:0} game${r.lines[0] && r.lines[0].gn===1 ? '' : 's'}`} this far into the season, so his expected scoring is marked down ${fmt(100*st.bench,0)}% (${fmt(st.pre,2)} → ${fmt(st.ppg,2)} PPG): someone is ahead of him. The markdown shrinks with every game he plays.</p>` : null}
       ${st.rsd>1.01 ? html`<p class="sub" style=${{marginTop:8}}>An early-pick QB with little NFL tape has a wider range of outcomes, so his spread is ×${fmt(st.rsd,2)}. That keeps upside in his value, and it narrows with each game he plays (gone after ${ROOKG}) instead of vanishing at his first snap.</p>` : null}
       ${st.idle ? html`<p class="sub" style=${{marginTop:8}}>Healthy but no games this season: his expected scoring is marked down ${fmt(100*st.idle,0)}%, the same way a rookie who hasn't taken a snap is.</p>` : null}
       ${st.inj ? html`<p class="sub" style=${{marginTop:8}}>Currently ${r.inj}: value marked down ${fmt(100*st.inj,0)}%.</p>` : null}
@@ -1098,6 +1101,7 @@ function Method({M, meta}){
       <p>Every number on this board comes from one formula run over each player's real game logs. Nothing is copied from another site's rankings.</p>
       <h3>1. Production, scored your way</h3>
       <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight. Values are scaled so the top 200 always add up to the same total: when a new season starts and everyone's sample resets, the whole board doesn't drop; only players who really rise or fall move. Running backs lean hardest on this season (3.8× a game), because roles at RB change fastest and the backtest ranks RBs better that way.</p>
+      <p class="sub">Games he left early count as the share he played. From snap counts: if a regular is on the field for under 35% of his usual snap share (an injury exit, an ejection), that game counts as that fraction of a game, so a few snaps can't drag his average down. Milder dips (a game where he played 60% of his usual snaps, say) count in full: tested on 2012–2025, discounting those made predictions worse, because a player banged up enough to play less tends to keep scoring less.</p>
       <h3>2. Pulled toward replacement</h3>
       <p class="sub">A player's average gets blended with phantom games at the level a player like him usually reaches: near replacement for an early first-round pick, well below it for a late-round or undrafted player. A hot few weeks can't vault a backup past a proven starter, and a backup with one start can't coast on being young. QBs get the most phantom games (see the table) because one QB season says the least about the next.</p>
       <h3>3. Draft capital for young players</h3>
@@ -1248,7 +1252,7 @@ function App(){
     const OV = (D.injuries&&D.injuries.rows)||{}, OL = (D.outlook&&D.outlook.rows)||{};
     POS.forEach(q=>Object.entries((D[q]&&D[q].rows)||{}).forEach(([k,e])=>{
       if(e.nf || !e.s || e.age==null) return;
-      out.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, wk:e.wk||null, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, comp:e.comp||null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null});
+      out.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, wk:e.wk||null, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, comp:e.comp||null, px:e.px||null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null});
     }));
     return out;
   }, [D.QB, D.RB, D.WR, D.TE, D.injuries, D.outlook]);
