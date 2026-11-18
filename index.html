@@ -462,7 +462,7 @@ function replacement(cands, c){
 // position that forecast's rank is blended with the formula's rank. Backtested 2012-2022 against the next three seasons:
 // QBs gained the most (rank accuracy +0.03 to +0.09), TEs, WRs and RBs a little; those shares are COMPW.
 // shared by the backtest and the page: k-nearest comparable players and the value blend
-const COMPW = {QB:0.5, RB:0.2, WR:0.25, TE:0.3};   // share of the value that comes from comparable players (backtested)
+const COMPW = {QB:0.5, RB:0.15, WR:0.15, TE:0.15};   // QB: a large backtested gain; others about neutral, kept small so their matches still show   // share of the value that comes from comparable players (backtested)
 function compDist(p,q){ return ((p.age-q.age)/1.0)**2 + ((p.x-q.x)/1.5)**2 + ((p.x1-q.x1)/2.5)**2 + ((p.ldp-q.ldp)/0.8)**2 + ((Math.min(p.car,60)-Math.min(q.car,60))/16)**2; }
 function compNear(f, pool, K){ K=K||25; const near=[]; for(const e of pool){ const d=compDist(f,e); if(near.length<K){ near.push([d,e]); near.sort((a,b)=>a[0]-b[0]); } else if(d<near[K-1][0]){ near[K-1]=[d,e]; near.sort((a,b)=>a[0]-b[0]); } }
   let sw=0, s=0; near.forEach(([d,e])=>{ const w=1/(0.3+d); sw+=w; s+=w*e.t; }); return {p: sw? s/sw : 0, near}; }
@@ -485,7 +485,9 @@ function compFeats(rows, S){ const RC = {...DEF, ...REF}, Rr = {};
   return r => { const f = y => { const l = seasonPts(r.p.s&&r.p.s[y], r.pos, RC); return l && Rr[y] ? {g:l.gn||l.g, x:l.ppg - Rr[y][r.pos]} : {g:0, x:null}; };
     const a=f(S), b=f(S-1), c=f(S-2); let car=0; Object.keys(r.p.s||{}).forEach(y=>{ const z=r.p.s[y]; if(+y<=S && z) car += +z[0]||0; });
     const w=[[a,2],[b,1],[c,0.5]].filter(([z])=>z.x!=null), den=w.reduce((s,[z,k])=>s+z.g*k,0);
-    return {age:r.ageNow, x: den>0 ? w.reduce((s,[z,k])=>s+z.x*z.g*k,0)/den : -6, x1: a.x==null ? -6 : a.x, car, ldp: Math.log(r.dp||300)}; }; }
+    // 'last season' for a season still short of games: blended with the one before, so two games can't stand in for a year
+    const x1 = a.x==null ? (b.x==null ? -6 : b.x) : b.x==null || a.g>=10 ? a.x : (a.g*a.x + 6*b.x)/(a.g+6);
+    return {age:r.ageNow, x: den>0 ? w.reduce((s,[z,k])=>s+z.x*z.g*k,0)/den : -6, x1, car, ldp: Math.log(r.dp||300)}; }; }
 // ---- Flatter tops (Nov 18 2026): above 150, values are compressed (power 0.85) before the level is set, so the best few at
 // each position sit closer to the next tier, as on lifetime-value lists. Order is untouched.
 const TOP_T = 150, TOP_G = 0.85;
@@ -550,6 +552,10 @@ function rankAll(players, cfgIn, now, adj){
     if(ov) st.ovr = r.ovr;
  // IR already carries its own, larger markdown, so short-injury math only applies off IR
     if(miss && !r.inj){ st.miss = miss; st.missF = 1 - PV[r.pos].inj*Math.min(1, miss/17); st.value *= st.missF; }   // games lost out of a season, at the position's injury cost
+    // how much injury, benching, being unsigned and situation took off him: comparable players know none of that, so their
+    // forecast gets the same haircut (otherwise blending with them would quietly undo an IR markdown)
+    { const om0 = outMult(r.out, false)*ef*una;
+      if(r.inj || st.missF || pb || st.idle || om0!==1){ const s0 = lifetime(r.pos, wv, r.ageNow, dpE, false, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, 0, 1, 0); r.sitF = s0.value>0 ? Math.min(2, st.value/s0.value) : 1; } }
     const a = +adj[r.k]||0;
     if(w0!==r.w) st.hurtW = 1;
     out.push({...r, w:w0, st, base:st.value, adj:a, v: st.value*(1+a/100)});
@@ -564,7 +570,7 @@ function rankAll(players, cfgIn, now, adj){
   // comparable players: move each player toward where his comps rank him (see COMPW), on the formula's own value ladder
   const pools = compLib(c.__comps);
   if(pools){ const fe = compFeats(out, S);
-    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p; r.cNear = res.near.slice(0,6).map(([d,e])=>({...e, d})); });
+    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p*(r.sitF!=null ? r.sitF : 1); r.cNear = res.near.slice(0,6).map(([d,e])=>({...e, d})); });
     const rows = out.filter(r=>r.c!=null && (r.base>0 || r.c>0)).map(r=>({r, pos:r.pos, v:r.base, c:r.c}));
     compBlend(rows);
     rows.forEach(x=>{ const r=x.r; if(x.vBlend==null) return; const f = r.base>0 ? x.vBlend/r.base : 1;
@@ -1077,7 +1083,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
       <div class="eq">value = ${fmt(st.value,1)}${r.modeF && Math.abs(r.modeF-1)>0.005 ? ' × '+fmt(r.modeF,2)+' = '+fmt(st.value*r.modeF,1) : ''}${r.adj ? ` → ${r.adj>0?'+':''}${r.adj}% owner adjustment → ${fmt(r.v,1)}` : ''}</div></div></div>
     </div>
     ${st.comp && st.comp.near && st.comp.near.length ? html`<div class="sec"><span class="eyebrow">Similar past players</span>
-      <p class="sub">Past ${r.pos}s at about his age, with similar production and draft slot. What they did next ranks him ${r.pos}${st.comp.cRank} among today's ${r.pos}s; the formula alone has him ${r.pos}${st.comp.vRank}. The comparison counts ${fmt(100*st.comp.w,0)}%, ${Math.abs(st.comp.before-st.comp.after) < 0.005*Math.max(1,st.comp.before) ? 'so his value is unchanged.' : `which moves his value from ${fmt(topF(st.comp.before)*(st.lvl||1),0)} to ${fmt(topF(st.comp.after)*(st.lvl||1),0)}.`}</p>
+      <p class="sub">Past ${r.pos}s at about his age, with similar production and draft slot.${r.sitF!=null && Math.abs(r.sitF-1)>0.02 ? ` Their forecast gets the same ${r.sitF<1?'markdown':'boost'} as the formula for his situation (${r.sitF<1?'−':'+'}${fmt(100*Math.abs(1-r.sitF),0)}%: injury, playing time, team).` : ''} What they did next ranks him ${r.pos}${st.comp.cRank} among today's ${r.pos}s; the formula alone has him ${r.pos}${st.comp.vRank}. The comparison counts ${fmt(100*st.comp.w,0)}%, ${Math.abs(st.comp.before-st.comp.after) < 0.005*Math.max(1,st.comp.before) ? 'so his value is unchanged.' : `which moves his value from ${fmt(topF(st.comp.before)*(st.lvl||1),0)} to ${fmt(topF(st.comp.after)*(st.lvl||1),0)}.`}</p>
       <div class="tscroll"><table><thead><tr><th>Player</th><th>Then</th><th>Next 3 seasons</th></tr></thead><tbody>
       ${st.comp.near.map((e,i)=>html`<tr key=${i}><td>${e.who}</td><td>${e.yr}, age ${fmt(e.age,1)}</td><td>${e.g3 ? fmt(e.n3,1)+' PPG, '+e.g3+' games' : 'out of the league'}</td></tr>`)}
       </tbody></table></div>
@@ -1164,7 +1170,7 @@ function Method({M, meta}){
       <h3>1. Production, scored your way</h3>
       <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight. Values are scaled so the top 200 always add up to the same total: when a new season starts and everyone's sample resets, the whole board doesn't drop; only players who really rise or fall move. Running backs lean hardest on this season (3.8× a game), because roles at RB change fastest and the backtest ranks RBs better that way.</p>
       <p class="sub">Games he left early count as the share he played. From snap counts: if a regular is on the field for under 35% of his usual snap share (an injury exit, an ejection), that game counts as that fraction of a game, so a few snaps can't drag his average down. Milder dips (a game where he played 60% of his usual snaps, say) count in full: tested on 2012–2025, discounting those made predictions worse, because a player banged up enough to play less tends to keep scoring less.</p>
-      <p class="sub">Comparable players. Every QB/RB/WR/TE after each season from 2006 to 2022 is on file with his age, recent production, career games and draft slot, and what he scored over the next three seasons. Each player's 25 closest matches give a second opinion on where he ranks at his position, and the final order blends the two: QBs 50%, TEs 30%, WRs 25%, RBs 20%. Tested on every board from 2012 to 2022, the blend predicted the next three seasons better at every position, QBs most. The formula still sets how much each rung is worth; the matches only change who stands on it. Each player's page lists his six closest matches.</p>
+      <p class="sub">Comparable players. Every QB/RB/WR/TE after each season from 2006 to 2022 is on file with his age, recent production, career games and draft slot, and what he scored over the next three seasons. Each player's 25 closest matches give a second opinion on where he ranks at his position, and the final order blends the two: QBs 50%, the others 15%. Tested on every board from 2012 to 2022, the blend predicted QBs' next three seasons clearly better; for RB, WR and TE it was about even, so they get a small share. The matches get the same markdown as the formula for injury, playing time and team situation, and a season with only a few games is blended with the one before it. The formula still sets how much each rung is worth; the matches only change who stands on it. Each player's page lists his six closest matches.</p>
       <p class="sub">Flatter tops. Above 150, values are compressed a little (to the power 0.85), so the best few at each position sit closer to the next tier, as on lifetime-value lists. The order doesn't change.</p>
       <h3>2. Pulled toward replacement</h3>
       <p class="sub">A player's average gets blended with phantom games at the level a player like him usually reaches: near replacement for an early first-round pick, well below it for a late-round or undrafted player. A hot few weeks can't vault a backup past a proven starter, and a backup with one start can't coast on being young. QBs get the most phantom games (see the table) because one QB season says the least about the next.</p>
