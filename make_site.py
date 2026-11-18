@@ -19,5 +19,16 @@ for k in ['QB', 'RB', 'WR', 'TE', 'meta', 'adj', 'defaults', 'classes', 'injurie
     if os.path.exists(p):
         j = json.load(open(p, encoding='utf-8')); data[k] = j.get('data', j) if isinstance(j, dict) and 'data' in j and 'id' in j else j
 json.dump(data, open(os.path.join(site, 'data.json'), 'w', encoding='utf-8'), separators=(',', ':'))
+# comparable-players library (large, rarely changes): stored as comps1..comps4, published as one file loaded after the board
+parts = []
+for i in range(1, 5):
+    cp = os.path.join(dbdir, 'comps%d.json' % i)
+    if os.path.exists(cp):
+        j = json.load(open(cp, encoding='utf-8')); parts.append(j.get('data', j) if isinstance(j, dict) and 'data' in j and 'id' in j else j)
+if len(parts) == 4:
+    names, rows = [], []
+    for p in parts:
+        off = len(names); names += p.get('names', []); rows += [r[:10] + [r[10] + off] for r in p.get('rows', [])]
+    json.dump({'names': names, 'rows': rows}, open(os.path.join(site, 'comps.json'), 'w', encoding='utf-8'), separators=(',', ':'))
 open(os.path.join(site, '.nojekyll'), 'w').write('')
 print('site built:', {k: len(json.dumps(v)) for k, v in data.items()})

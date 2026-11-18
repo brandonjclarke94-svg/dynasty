@@ -456,6 +456,40 @@ function replacement(cands, c){
   return {R, N};
 }
 // players: [{k,n,pos,team,age,ad,dp,inj,rk,s:{season:[...]}}]; adj: {k: pct}
+// ---- Comparable players (Nov 18 2026). A library of every QB/RB/WR/TE after each season 2006-2022 (age, recent production
+// above replacement, last season alone, career games, draft slot) and what each went on to score over the next three seasons
+// (12-team superflex full PPR, points above replacement). Each player's 25 nearest past players give a forecast; within his
+// position that forecast's rank is blended with the formula's rank. Backtested 2012-2022 against the next three seasons:
+// QBs gained the most (rank accuracy +0.03 to +0.09), TEs, WRs and RBs a little; those shares are COMPW.
+// shared by the backtest and the page: k-nearest comparable players and the value blend
+const COMPW = {QB:0.5, RB:0.2, WR:0.25, TE:0.3};   // share of the value that comes from comparable players (backtested)
+function compDist(p,q){ return ((p.age-q.age)/1.0)**2 + ((p.x-q.x)/1.5)**2 + ((p.x1-q.x1)/2.5)**2 + ((p.ldp-q.ldp)/0.8)**2 + ((Math.min(p.car,60)-Math.min(q.car,60))/16)**2; }
+function compNear(f, pool, K){ K=K||25; const near=[]; for(const e of pool){ const d=compDist(f,e); if(near.length<K){ near.push([d,e]); near.sort((a,b)=>a[0]-b[0]); } else if(d<near[K-1][0]){ near[K-1]=[d,e]; near.sort((a,b)=>a[0]-b[0]); } }
+  let sw=0, s=0; near.forEach(([d,e])=>{ const w=1/(0.3+d); sw+=w; s+=w*e.t; }); return {p: sw? s/sw : 0, near}; }
+// rows: [{pos, v, c}] (c = comps forecast). Within each position, rank players by the model and by their comps, blend the two
+// ranks (log scale, the comps share is W), and hand out the model's own value ladder in the blended order. The ladder (how much
+// #1 is worth, #2, ...) is the model's; comparable players only move who sits on which rung.
+function compBlend(rows, W){ W=W||COMPW; for(const q of ['QB','RB','WR','TE']){ const P=rows.filter(r=>r.pos===q && r.c!=null); if(P.length<2 || !W[q]) continue;
+  const ladder=P.map(r=>r.v).sort((a,b)=>b-a);
+  const rk=key=>{ const o=new Map(); [...P].sort((a,b)=>key(b)-key(a)).forEach((r,i)=>o.set(r,i+1)); return o; };
+  const rv=rk(r=>r.v), rc=rk(r=>r.c);
+  P.forEach(r=>{ r.cRank=rc.get(r); r.vRank=rv.get(r); r.bScore=(1-W[q])*Math.log(rv.get(r))+W[q]*Math.log(rc.get(r)); });
+  [...P].sort((a,b)=>a.bScore-b.bScore || b.v-a.v).forEach((r,i)=>{ r.vBlend=ladder[i]; }); } return rows; }
+function mergeComps(parts){ const names=[], rows=[]; parts.forEach(p=>{ const off=names.length; (p.names||[]).forEach(x=>names.push(x)); (p.rows||[]).forEach(a=>rows.push([...a.slice(0,10), a[10]+off])); }); return {names, rows}; }
+function compLib(lib){ if(!lib || !lib.rows) return null; if(lib._pools) return lib._pools; const P=['QB','RB','WR','TE'], pools={QB:[],RB:[],WR:[],TE:[]};
+  lib.rows.forEach(a=>pools[P[a[0]]].push({yr:a[1], age:a[2], x:a[3], x1:a[4], car:a[5], ldp:a[6], t:a[7], n3:a[8], g3:a[9], who:lib.names[a[10]]}));
+  Object.defineProperty(lib,'_pools',{value:pools, enumerable:false}); return pools; }
+// features in the library's terms: reference scoring, production as points per game above that season's reference replacement
+function compFeats(rows, S){ const RC = {...DEF, ...REF}, Rr = {};
+  [S, S-1, S-2].forEach(y=>{ const c=[]; rows.forEach(r=>{ const l=seasonPts(r.p.s&&r.p.s[y], r.pos, RC); if(l && l.g>=4) c.push({pos:r.pos, ppg:l.ppg}); }); Rr[y] = c.length>40 ? replacement(c, RC).R : null; });
+  return r => { const f = y => { const l = seasonPts(r.p.s&&r.p.s[y], r.pos, RC); return l && Rr[y] ? {g:l.gn||l.g, x:l.ppg - Rr[y][r.pos]} : {g:0, x:null}; };
+    const a=f(S), b=f(S-1), c=f(S-2); let car=0; Object.keys(r.p.s||{}).forEach(y=>{ const z=r.p.s[y]; if(+y<=S && z) car += +z[0]||0; });
+    const w=[[a,2],[b,1],[c,0.5]].filter(([z])=>z.x!=null), den=w.reduce((s,[z,k])=>s+z.g*k,0);
+    return {age:r.ageNow, x: den>0 ? w.reduce((s,[z,k])=>s+z.x*z.g*k,0)/den : -6, x1: a.x==null ? -6 : a.x, car, ldp: Math.log(r.dp||300)}; }; }
+// ---- Flatter tops (Nov 18 2026): above 150, values are compressed (power 0.85) before the level is set, so the best few at
+// each position sit closer to the next tier, as on lifetime-value lists. Order is untouched.
+const TOP_T = 150, TOP_G = 0.85;
+const topF = x => x>TOP_T ? TOP_T*Math.pow(x/TOP_T, TOP_G) : x;
 function rankAll(players, cfgIn, now, adj){
   const c = {...DEF, ...cfgIn}; adj = adj||{};
   let S = 0; players.forEach(p=>Object.keys(p.s||{}).forEach(y=>{ if(p.s[y] && p.s[y][0]>0) S=Math.max(S,+y); }));
@@ -527,6 +561,17 @@ function rankAll(players, cfgIn, now, adj){
     const avg = top.reduce((a,r)=>a+r.st.tilt,0)/Math.max(1,top.length);
     xs.forEach(r=>{ const f = avg>0 ? r.st.tilt/avg : 1; r.modeF = f; r.base *= f; r.v = r.base*(1+(r.adj||0)/100); });
   });
+  // comparable players: move each player toward where his comps rank him (see COMPW), on the formula's own value ladder
+  const pools = compLib(c.__comps);
+  if(pools){ const fe = compFeats(out, S);
+    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p; r.cNear = res.near.slice(0,6).map(([d,e])=>({...e, d})); });
+    const rows = out.filter(r=>r.c!=null && (r.base>0 || r.c>0)).map(r=>({r, pos:r.pos, v:r.base, c:r.c}));
+    compBlend(rows);
+    rows.forEach(x=>{ const r=x.r; if(x.vBlend==null) return; const f = r.base>0 ? x.vBlend/r.base : 1;
+      r.st = {...r.st, comp:{before:r.base, after:x.vBlend, cRank:x.cRank, vRank:x.vRank, near:r.cNear, w:COMPW[r.pos]}};
+      r.base = x.vBlend; r.v = r.base*(1+(r.adj||0)/100); r.st.value *= f; r.st.yrs = (r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})); }); }
+  // flatter tops
+  out.forEach(r=>{ if(r.base>TOP_T){ const f = topF(r.base)/r.base; r.base*=f; r.v*=f; r.st = {...r.st, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})), top:f}; } });
   // Hold the league's overall level steady. The board's raw numbers rise and fall together through a season (early on,
   // each player has fewer games at full weight, so everyone is pulled further toward average), which would show up as
   // the whole board dropping in week 1 and climbing back. Scaling every value so the top 200 always add up to the same
@@ -622,7 +667,7 @@ function pickBoard(rows, c, S, now){
 }
 // trade value: stars are worth more than the sum of parts
 function tradeVal(v, star){ return v>0 ? Math.pow(v, star) : 0; }
-if(typeof module!=='undefined') module.exports = {OUTLOOK,outMult,ovrLeft,expMiss,ATH,CLASS_LEVELS,ROOKSD,ROOKG,BENCH,MODES,TGT,ROOK,TEP0,REF,POS,F,DEF,PRESETS,PV,normName,seasonPts,weighted,lifetime,replacement,rankAll,tradeVal};
+if(typeof module!=='undefined') module.exports = {OUTLOOK,outMult,ovrLeft,expMiss,ATH,CLASS_LEVELS,ROOKSD,ROOKG,BENCH,MODES,mergeComps,TGT,ROOK,TEP0,REF,POS,F,DEF,PRESETS,PV,normName,seasonPts,weighted,lifetime,replacement,rankAll,tradeVal};
 
 /* ===== page ===== */
 const {useState, useEffect, useMemo, useRef} = React;
@@ -1031,6 +1076,12 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
       ${r.modeF && Math.abs(r.modeF-1)>0.005 ? html`<p class="sub" style=${{marginTop:8}}>${MODES[M.cfg.mode].label}: with your seasons weighted, his career counts ${fmt(st.tilt,2)}× on average, against ${fmt(st.tilt/r.modeF,2)}× for a typical top-40 ${r.pos}. So he moves ×${fmt(r.modeF,2)} against his position.</p>` : null}
       <div class="eq">value = ${fmt(st.value,1)}${r.modeF && Math.abs(r.modeF-1)>0.005 ? ' × '+fmt(r.modeF,2)+' = '+fmt(st.value*r.modeF,1) : ''}${r.adj ? ` → ${r.adj>0?'+':''}${r.adj}% owner adjustment → ${fmt(r.v,1)}` : ''}</div></div></div>
     </div>
+    ${st.comp && st.comp.near && st.comp.near.length ? html`<div class="sec"><span class="eyebrow">Similar past players</span>
+      <p class="sub">Past ${r.pos}s at about his age, with similar production and draft slot. What they did next ranks him ${r.pos}${st.comp.cRank} among today's ${r.pos}s; the formula alone has him ${r.pos}${st.comp.vRank}. The comparison counts ${fmt(100*st.comp.w,0)}%, ${Math.abs(st.comp.before-st.comp.after) < 0.005*Math.max(1,st.comp.before) ? 'so his value is unchanged.' : `which moves his value from ${fmt(topF(st.comp.before)*(st.lvl||1),0)} to ${fmt(topF(st.comp.after)*(st.lvl||1),0)}.`}</p>
+      <div class="tscroll"><table><thead><tr><th>Player</th><th>Then</th><th>Next 3 seasons</th></tr></thead><tbody>
+      ${st.comp.near.map((e,i)=>html`<tr key=${i}><td>${e.who}</td><td>${e.yr}, age ${fmt(e.age,1)}</td><td>${e.g3 ? fmt(e.n3,1)+' PPG, '+e.g3+' games' : 'out of the league'}</td></tr>`)}
+      </tbody></table></div>
+      <p class="note" style=${{marginTop:6}}>Points per game in full PPR, so they read the same whatever your format. The forecast uses his 25 closest matches; these are the six closest.</p></div>` : null}
     ${canEdit ? html`<div class="sec"><span class="eyebrow">Owner tools</span>
     <${InjOverride} r=${r} onSave=${onInj}/>
     <div class="step"><span class="n">✎</span><div><div class="t">Owner adjustment</div>
@@ -1113,6 +1164,8 @@ function Method({M, meta}){
       <h3>1. Production, scored your way</h3>
       <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight. Values are scaled so the top 200 always add up to the same total: when a new season starts and everyone's sample resets, the whole board doesn't drop; only players who really rise or fall move. Running backs lean hardest on this season (3.8× a game), because roles at RB change fastest and the backtest ranks RBs better that way.</p>
       <p class="sub">Games he left early count as the share he played. From snap counts: if a regular is on the field for under 35% of his usual snap share (an injury exit, an ejection), that game counts as that fraction of a game, so a few snaps can't drag his average down. Milder dips (a game where he played 60% of his usual snaps, say) count in full: tested on 2012–2025, discounting those made predictions worse, because a player banged up enough to play less tends to keep scoring less.</p>
+      <p class="sub">Comparable players. Every QB/RB/WR/TE after each season from 2006 to 2022 is on file with his age, recent production, career games and draft slot, and what he scored over the next three seasons. Each player's 25 closest matches give a second opinion on where he ranks at his position, and the final order blends the two: QBs 50%, TEs 30%, WRs 25%, RBs 20%. Tested on every board from 2012 to 2022, the blend predicted the next three seasons better at every position, QBs most. The formula still sets how much each rung is worth; the matches only change who stands on it. Each player's page lists his six closest matches.</p>
+      <p class="sub">Flatter tops. Above 150, values are compressed a little (to the power 0.85), so the best few at each position sit closer to the next tier, as on lifetime-value lists. The order doesn't change.</p>
       <h3>2. Pulled toward replacement</h3>
       <p class="sub">A player's average gets blended with phantom games at the level a player like him usually reaches: near replacement for an early first-round pick, well below it for a late-round or undrafted player. A hot few weeks can't vault a backup past a proven starter, and a backup with one start can't coast on being young. QBs get the most phantom games (see the table) because one QB season says the least about the next.</p>
       <h3>3. Draft capital for young players</h3>
@@ -1241,12 +1294,16 @@ function App(){
           const d = await r.json(), o = {};
           ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{ o[k] = d[k]||null; o['_'+k] = true; });
           setD(o);
+          fetch('comps.json').then(x=>x.ok?x.json():null).then(c=>{ if(c && alive) setD(o2=>({...o2, comps:c})); }).catch(()=>{});
         }catch(e){ setStatus(s=>({...s, err:'Sign in to claude.ai to see the board.'})); }
         setLoaded(true); return; }
       dbRef.current = db;
       ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{
         unsubs.push(db.doc('board/'+k).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; setD(o=>({...o, [k]:d, ['_'+k]:true})); }, ()=>{}));
       });
+      // comparable-players library, stored in four parts (optional: the board works without it)
+      { const parts = {}; [1,2,3,4].forEach(i=>unsubs.push(db.doc('board/comps'+i).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(!d) return; parts[i] = d;
+          if([1,2,3,4].every(j=>parts[j])) setD(o=>({...o, comps:mergeComps([1,2,3,4].map(j=>parts[j]))})); }, ()=>{}))); }
       try{ const u = await window.claude.use('user'); if(u && await u.canEdit()) setCanEdit(true); }catch(e){}
     })();
     return ()=>{ alive=false; clearTimeout(t); unsubs.forEach(u=>{ try{u();}catch(e){} }); };
@@ -1269,12 +1326,12 @@ function App(){
   }, [D.QB, D.RB, D.WR, D.TE, D.injuries, D.outlook]);
   const M = useMemo(()=>{
     if(!players.length) return null;
-    const adj = (D.adj&&D.adj.rows)||{}, cls = (D.classes&&D.classes.years)||{}, m = rankAll(players, {...cfg, __class:cls, __ecrAt:(D.meta&&D.meta.ecrAt)||null, __env:(D.meta&&D.meta.env)||null}, now, adj);
+    const adj = (D.adj&&D.adj.rows)||{}, cls = (D.classes&&D.classes.years)||{}, m = rankAll(players, {...cfg, __class:cls, __ecrAt:(D.meta&&D.meta.ecrAt)||null, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null}, now, adj);
     const w30 = D.meta && D.meta.w30;
     if(w30){   // the same board as of ~30 days ago: this season's stats through week w30, everyone 30 days younger
       const S = String(m.season), then = now - 30*864e5;
       const past = players.map(p=> p.s30===undefined ? p : {...p, s:{...p.s, [S]:p.s30}});
-      const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left, __env:(D.meta&&D.meta.env)||null}, then, adj), by = {};
+      const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null}, then, adj), by = {};
       m0.rows.forEach(r=>by[r.k]=r);
       // Trend = his value today minus what his position rank of 30 days ago is worth today. (Raw values drift up for
       // everyone good as a season's games pile up, so a plain before/after would call nearly every star a riser.)
@@ -1283,7 +1340,7 @@ function App(){
       m.w30 = w30;
     }
     return m;
-  }, [players, JSON.stringify(cfg), D.adj, D.meta, D.classes]);
+  }, [players, JSON.stringify(cfg), D.adj, D.meta, D.classes, D.comps]);
 
   const saveAdj = async (k, v) => { const db = dbRef.current; if(!db) return; const rows = {...((D.adj&&D.adj.rows)||{})}; if(v) rows[k]=v; else delete rows[k]; await db.doc('board/adj').set({rows}); setOpen(null); };
   const saveInj = async (k, g, note) => { const db = dbRef.current; if(!db) return; const rows = {...((D.injuries&&D.injuries.rows)||{})}; if(g) rows[k] = {games:g, at:Date.now(), note, auto:false}; else delete rows[k]; await db.doc('board/injuries').set({rows}); };
@@ -1293,11 +1350,11 @@ function App(){
 
   // value history: built the first time a player is opened (about a dozen past boards), then kept until the data or format changes
   const [hist, setHist] = useState(null);
-  const histKey = M ? JSON.stringify(cfg)+'|'+(D.meta&&D.meta.at)+'|'+JSON.stringify((D.adj&&D.adj.rows)||{}) : '';
+  const histKey = M ? JSON.stringify(cfg)+'|'+(D.meta&&D.meta.at)+'|'+JSON.stringify((D.adj&&D.adj.rows)||{})+'|'+(D.comps?1:0) : '';
   useEffect(()=>{
     if(!open || !M || (hist && hist.key===histKey)) return;
     const t = setTimeout(()=>{ try{
-      const H = valueHistory(players, {...cfg, __class:(D.classes&&D.classes.years)||{}}, (D.adj&&D.adj.rows)||{}, M.season, now);
+      const H = valueHistory(players, {...cfg, __class:(D.classes&&D.classes.years)||{}, __comps:D.comps||null}, (D.adj&&D.adj.rows)||{}, M.season, now);
       setHist({key:histKey, H});
     }catch(e){ console.error(e); setHist({key:histKey, H:[]}); } }, 60);
     return ()=>clearTimeout(t);
