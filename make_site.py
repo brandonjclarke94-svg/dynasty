@@ -30,6 +30,6 @@ if parts and len(parts) == parts[0].get('of') and len({p.get('built') for p in p
     parts.sort(key=lambda p: p['part']); names, rows = [], []
     for p in parts:
         off = len(names); names += p.get('names', []); rows += [r[:8] + [r[8] + off] + r[9:] for r in p.get('rows', [])]
-    json.dump({'v': 2, 'names': names, 'rows': rows}, open(os.path.join(site, 'comps.json'), 'w', encoding='utf-8'), separators=(',', ':'))
+    json.dump({'v': 2, 'R': parts[0].get('R'), 'names': names, 'rows': rows}, open(os.path.join(site, 'comps.json'), 'w', encoding='utf-8'), separators=(',', ':'))
 open(os.path.join(site, '.nojekyll'), 'w').write('')
 print('site built:', {k: len(json.dumps(v)) for k, v in data.items()})

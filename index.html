@@ -466,7 +466,9 @@ function replacement(cands, c){
 const COMPW = {QB:0.5, RB:0.15, WR:0.15, TE:0.15};   // QB: a large backtested gain; others about neutral, kept small so their matches still show   // share of the value that comes from comparable players (backtested)
 function compDist(p,q){ return ((p.age-q.age)/1.0)**2 + ((p.x-q.x)/1.5)**2 + ((p.x1-q.x1)/2.5)**2 + ((p.ldp-q.ldp)/0.8)**2 + ((Math.min(p.car,60)-Math.min(q.car,60))/16)**2; }
 function compNear(f, pool, K){ K=K||25; const near=[]; for(const e of pool){ const d=compDist(f,e); if(near.length<K){ near.push([d,e]); near.sort((a,b)=>a[0]-b[0]); } else if(d<near[K-1][0]){ near[K-1]=[d,e]; near.sort((a,b)=>a[0]-b[0]); } }
-  let sw=0, s=0; near.forEach(([d,e])=>{ const w=1/(0.3+d); sw+=w; s+=w*e.t; }); return {p: sw? s/sw : 0, near}; }
+  // weights scale with how far the typical match is (half-weight at the median distance), so one very close match can't
+  // outvote the other 24 (Nov 18: backtested the same or slightly better than the old 1/(0.3+d), and far steadier)
+  const md = near.length ? near[Math.floor(near.length/2)][0] : 1; let sw=0, s=0; near.forEach(x=>{ const w=1/(md+x[0]+0.05); x.push(w); sw+=w; s+=w*x[1].t; }); return {p: sw? s/sw : 0, near}; }
 // rows: [{pos, v, c}] (c = comps forecast). Within each position, rank players by the model and by their comps, blend the two
 // ranks (log scale, the comps share is W), and hand out the model's own value ladder in the blended order. The ladder (how much
 // #1 is worth, #2, ...) is the model's; comparable players only move who sits on which rung.
@@ -476,11 +478,11 @@ function compBlend(rows, W){ W=W||COMPW; for(const q of ['QB','RB','WR','TE']){ 
   const rv=rk(r=>r.v), rc=rk(r=>r.c);
   P.forEach(r=>{ r.cRank=rc.get(r); r.vRank=rv.get(r); r.bScore=(1-W[q])*Math.log(rv.get(r))+W[q]*Math.log(rc.get(r)); });
   [...P].sort((a,b)=>a.bScore-b.bScore || b.v-a.v).forEach((r,i)=>{ r.vBlend=ladder[i]; }); } return rows; }
-function mergeComps(parts){ const names=[], rows=[]; parts.forEach(p=>{ const off=names.length; (p.names||[]).forEach(x=>names.push(x)); (p.rows||[]).forEach(a=>{ const b=a.slice(); b[8]=a[8]+off; rows.push(b); }); }); return {v:2, names, rows}; }
+function mergeComps(parts){ const names=[], rows=[]; parts.forEach(p=>{ const off=names.length; (p.names||[]).forEach(x=>names.push(x)); (p.rows||[]).forEach(a=>{ const b=a.slice(); b[8]=a[8]+off; rows.push(b); }); }); return {v:2, R:(parts[0]&&parts[0].R)||null, names, rows}; }
 function compLib(lib){ if(!lib || !lib.rows) return null; if(lib._pools) return lib._pools; const P=['QB','RB','WR','TE'], pools={QB:[],RB:[],WR:[],TE:[]};
   const dec = v => v==null || v<0 ? null : {ppg:Math.floor(v/100)/10, g:v%100};   // a later season: PPG and games (null = not played yet)
   lib.rows.forEach(a=>pools[P[a[0]]].push({yr:a[1], age:a[2], x:a[3], x1:a[4], car:a[5], ldp:a[6], t:a[7], who:lib.names[a[8]], fut:[a[9],a[10],a[11],a[12]].map(dec)}));
-  Object.defineProperty(lib,'_pools',{value:pools, enumerable:false}); return pools; }
+  Object.defineProperty(pools,'R',{value:lib.R||null, enumerable:false}); Object.defineProperty(lib,'_pools',{value:pools, enumerable:false}); return pools; }
 // features in the library's terms: reference scoring, production as points per game above that season's reference replacement
 function compFeats(rows, S){ const RC = {...DEF, ...REF}, Rr = {};
   [S, S-1, S-2].forEach(y=>{ const c=[]; rows.forEach(r=>{ const l=seasonPts(r.p.s&&r.p.s[y], r.pos, RC); if(l && l.g>=4) c.push({pos:r.pos, ppg:l.ppg}); }); Rr[y] = c.length>40 ? replacement(c, RC).R : null; });
@@ -491,7 +493,7 @@ function compFeats(rows, S){ const RC = {...DEF, ...REF}, Rr = {};
     const x1 = a.x==null ? (b.x==null ? -6 : b.x) : b.x==null || a.g>=10 ? a.x : (a.g*a.x + 6*b.x)/(a.g+6);
     return {age:r.ageNow, x: den>0 ? w.reduce((s,[z,k])=>s+z.x*z.g*k,0)/den : -6, x1, car, ldp: Math.log(r.dp||300)}; };
   // for the projected-path chart: his own seasons in the same reference scoring, and that scoring's replacement level
-  fn.ref = r => ({R: Rr[S] ? Rr[S][r.pos] : null, S, past:[S-2, S-1, S].map(y=>{ const l = seasonPts(r.p.s&&r.p.s[y], r.pos, RC); return {y, ppg: l ? l.ppg : null, g: l ? (l.gn||l.g) : 0}; })});
+  fn.ref = r => ({R: Rr[S] ? Rr[S][r.pos] : null, S, x: fn(r).x, past:[S-2, S-1, S].map(y=>{ const l = seasonPts(r.p.s&&r.p.s[y], r.pos, RC); return {y, ppg: l ? l.ppg : null, g: l ? (l.gn||l.g) : 0}; })});
   return fn; }
 // ---- Flatter tops (Nov 18 2026): above 150, values are compressed (power 0.85) before the level is set, so the best few at
 // each position sit closer to the next tier, as on lifetime-value lists. Order is untouched.
@@ -575,7 +577,7 @@ function rankAll(players, cfgIn, now, adj){
   // comparable players: move each player toward where his comps rank him (see COMPW), on the formula's own value ladder
   const pools = compLib(c.__comps);
   if(pools){ const fe = compFeats(out, S);
-    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p*(r.sitF!=null ? r.sitF : 1); r.cNear = res.near.map(([d,e])=>({...e, d})); r.cRef = fe.ref(r); });
+    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p*(r.sitF!=null ? r.sitF : 1); r.cNear = res.near.map(([d,e,w])=>({...e, d, w})); r.cRef = {...fe.ref(r), RY:pools.R}; });
     const rows = out.filter(r=>r.c!=null && (r.base>0 || r.c>0)).map(r=>({r, pos:r.pos, v:r.base, c:r.c}));
     compBlend(rows);
     rows.forEach(x=>{ const r=x.r; if(x.vBlend==null) return; const f = r.base>0 ? x.vBlend/r.base : 1;
@@ -957,13 +959,21 @@ function PpgChart({r, M}){
 // Projected path: his last three seasons, then what his 25 closest matches did in each of the next four (weighted by how
 // close each match is). Line = typical PPG among those still playing; band = middle half; under each season, the share
 // still playing (4+ games). Reference scoring (full PPR) so past and future read on one scale.
+// share of a production gap (his PPG above replacement minus a match's) that carries into each of the next four seasons, among
+// players still playing: fitted on the 2006-2022 library
+const COMP_B = {QB:[0.89,0.95,0.89,0.91], RB:[0.81,0.68,0.57,0.47], WR:[0.92,0.88,0.75,0.57], TE:[0.79,0.81,0.68,0.69]};
 function wq(xs, q){ const a = xs.filter(x=>x.w>0).sort((p,r)=>p.v-r.v), tot = a.reduce((s,x)=>s+x.w,0); let c = 0; for(const x of a){ c += x.w; if(c >= q*tot) return x.v; } return a.length ? a[a.length-1].v : null; }
 function CompPath({r, c}){
   if(!c || !c.near || !c.ref) return null;
-  const S = c.ref.S, near = c.near.map(e=>({...e, w:1/(0.3+e.d)}));
+  const S = c.ref.S, near = c.near;
+  // each match's later season, read as points above THAT season's replacement (scoring has risen over the years), moved by
+  // the share of the gap between him and the match that usually carries forward (COMP_B), then put on today's replacement
+  const RY = c.ref.RY, qi = POS.indexOf(r.pos), R0 = c.ref.R;
+  const lvl = (e, j) => { const y = e.yr+1+j, Ry = RY && RY[y] ? RY[y][qi] : null; if(Ry==null || R0==null || c.ref.x==null) return e.fut[j].ppg;
+    return R0 + (e.fut[j].ppg - Ry) + (COMP_B[r.pos][j]||0)*(c.ref.x - e.x); };
   const fut = [0,1,2,3].map(j=>{ const k = near.filter(e=>e.fut[j]); if(k.length < 8) return null;
     const play = k.filter(e=>e.fut[j].g>=4), wAll = k.reduce((s,e)=>s+e.w,0), wPlay = play.reduce((s,e)=>s+e.w,0);
-    const xs = play.map(e=>({v:e.fut[j].ppg, w:e.w}));
+    const xs = play.map(e=>({v:lvl(e,j), w:e.w}));
     return {y:S+1+j, n:k.length, share: wAll ? wPlay/wAll : 0, mid: xs.length>=4 ? wq(xs,.5) : null, lo: xs.length>=4 ? wq(xs,.25) : null, hi: xs.length>=4 ? wq(xs,.75) : null}; });
   const past = c.ref.past.filter(p=>p.ppg!=null && p.g>=1);
   const pts = [...past.map(p=>({y:p.y, v:p.ppg})), ...fut.filter(f=>f && f.mid!=null).map(f=>({y:f.y, v:f.mid, lo:f.lo, hi:f.hi}))];
@@ -992,7 +1002,7 @@ function CompPath({r, c}){
       ${fut.map(f=> f ? html`<text key=${'s'+f.y} x=${sx(f.y)} y=${H+26} text-anchor="middle" class="axl">${fmt(100*f.share,0)}%</text>` : null)}
       <text x=${sx(S-1)} y=${H+26} text-anchor="middle" class="axl">his PPG</text>
     </svg>
-    <p class="note" style=${{margin:'4px 0 0'}}>Solid: his seasons. Dashed: the typical PPG of his 25 closest matches in each later season (among those still playing), with the middle half shaded. Bottom row: share of them still playing. Full-PPR points, the same scale as the table below.</p></div>`;
+    <p class="note" style=${{margin:'4px 0 0'}}>Solid: his seasons. Dashed: what his 25 closest matches did in each later season (among those still playing), the middle half shaded. Each match is put on today's scoring (their era's replacement level swapped for today's) and adjusted for how much better or worse he is than that match, by the share of such gaps that usually carries forward. Bottom row: share still playing. Full PPR.</p></div>`;
 }
 function CareerChart({r}){
   const ys = (r.st.yrs||[]).slice(0,14); if(ys.length<2) return null;
