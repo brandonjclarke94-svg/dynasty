@@ -1012,7 +1012,7 @@ function CompPath({r, c}){
       ${fut.map(f=> f ? html`<text key=${'s'+f.y} x=${sx(f.y)} y=${H+26} text-anchor="middle" class="axl">${fmt(100*f.share,0)}%</text>` : null)}
       <text x=${sx(S-1)} y=${H+26} text-anchor="middle" class="axl">his PPG</text>
     </svg>
-    <p class="note" style=${{margin:'4px 0 0'}}>Solid: his seasons. Dashed: what his 25 closest matches did in each later season (among those still playing), the middle half shaded. Each match is put on today's scoring (their era's replacement level swapped for today's) and adjusted for how much better or worse he is than that match, by the share of such gaps that usually carries forward. Bottom row: share still playing. Full PPR.</p></div>`;
+    <p class="note" style=${{margin:'4px 0 0'}}>Solid: his seasons. Dashed: what his 25 closest matches did in each later season (among those still playing), the middle half shaded. Each match is put on today's scoring (their era's replacement level swapped for today's) and adjusted for how much better or worse he is than that match, by the share of such gaps that usually carries forward. Bottom row: share still playing. Full PPR. The ranking uses something stricter than this chart: the matches' actual points above replacement over the next three seasons, missed games counted as zero and with no adjustment for how much better he is (adjusting made past rankings less accurate). So an injury-prone set of matches, or a player well ahead of his matches, can rank lower than this chart suggests.</p></div>`;
 }
 function CareerChart({r}){
   const ys = (r.st.yrs||[]).slice(0,14); if(ys.length<2) return null;
