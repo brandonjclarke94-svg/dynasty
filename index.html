@@ -217,6 +217,7 @@ div.row{cursor:default}
 .chart svg{display:block;width:100%;height:auto;max-height:160px;overflow:visible}
 .chart text{font-family:var(--f-mono);font-size:10px;fill:var(--muted)}
 .chart text.axl{font-size:9px}
+td.win{color:var(--good);font-weight:600}
 .step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding:12px 0;border-top:1px solid var(--line)}
 .step:first-child{border-top:0}
 .step .n{font-family:var(--f-display);font-weight:800;font-size:18px;color:var(--accent);line-height:1.2}
@@ -507,7 +508,7 @@ function compFeats(rows, S, gS){ const RC = {...DEF, ...REF}, Rr = {};
     for(let y=Math.max(first, S-2); y<=S; y++){ const cap = y===S ? Math.max(1, gS) : (y>=2021 ? 17 : 16); gp += Math.min(gz(raw(y)), cap); pg += cap; }
     return {pos:r.pos, age:r.ageNow, x: den>0 ? w.reduce((s,[z,k])=>s+z.x*z.g*k,0)/den : -6, x1, car, ldp: Math.log(r.dp||300), vol, du: pg ? gp/pg : null}; };
   // for the projected-path chart: his own seasons in the same reference scoring, and that scoring's replacement level
-  fn.ref = r => ({R: Rr[S] ? Rr[S][r.pos] : null, S, x: fn(r).x, past:[S-2, S-1, S].map(y=>{ const l = seasonPts(r.p.s&&r.p.s[y], r.pos, RC); return {y, ppg: l ? l.ppg : null, g: l ? (l.gn||l.g) : 0}; })});
+  fn.ref = r => ({R: Rr[S] ? Rr[S][r.pos] : null, S, x: fn(r).x, du: fn(r).du, past:[S-2, S-1, S].map(y=>{ const l = seasonPts(r.p.s&&r.p.s[y], r.pos, RC); return {y, ppg: l ? l.ppg : null, g: l ? (l.gn||l.g) : 0}; })});
   return fn; }
 // ---- Flatter tops (Nov 18 2026): above 150, values are compressed (power 0.85) before the level is set, so the best few at
 // each position sit closer to the next tier, as on lifetime-value lists. Order is untouched.
@@ -1234,9 +1235,83 @@ function FormatView({cfg, setCfg, def, canEdit, onSaveDef, hasFd}){
       ${canEdit ? html`<button class="btn primary" onClick=${()=>onSaveDef(cfg)}>Make this the default for everyone</button>` : null}</div>`;
 }
 
-function Method({M, meta}){
+
+// ---- Accuracy scorecard: the board as it stood before this season (last season's games only, no news), against expert
+// consensus from just before week 1, both judged on what players have produced so far this season (points above
+// replacement in your scoring). Plus the backtests from past seasons. One season is a small sample; dynasty value is long-term.
+function spearR(a, b){ const n=a.length; if(n<5) return null; const rk=x=>{ const s=x.map((v,i)=>[v,i]).sort((p,q)=>p[0]-q[0]); const r=new Array(n); s.forEach((p,i)=>r[p[1]]=i+1); return r; };
+  const A=rk(a), B=rk(b), m=(n+1)/2; let x=0,y=0,z=0; for(let i=0;i<n;i++){ x+=(A[i]-m)*(B[i]-m); y+=(A[i]-m)**2; z+=(B[i]-m)**2; } return y&&z ? x/Math.sqrt(y*z) : null; }
+function Scorecard({M, players, cfg, ecr0, comps, adj, classes}){
+  const S = M && M.season;
+  const res = useMemo(()=>{
+    if(!M || M.redraft || !ecr0 || ecr0.season!==S) return null;
+    const Y = S-1, t = weekEnd(Y, 18);
+    const ps = players.filter(p=>!p.dy || p.dy<=S).map(p=>{ const s={}; Object.keys(p.s||{}).forEach(y=>{ if(+y<=Y) s[y]=p.s[y]; }); return {...p, inj:null, rep:null, ovr:null, moved:null, out:null, rk:false, s30:undefined, comp:null, s}; });
+    let pre; try{ pre = rankAll(ps, {...cfg, __class:classes||{}, __comps:comps||null, __env:null}, t, adj||{}); }catch(e){ return null; }
+    const pp = {}; pre.rows.forEach(r=>pp[r.k]=r.prank);
+    const E = (cfg.sf||cfg.qb>1) ? ecr0.sf : ecr0.oneqb, ep = {};
+    POS.forEach(q=>{ M.rows.filter(r=>r.pos===q && E[r.k]).sort((a,b)=>E[a.k]-E[b.k]).forEach((r,i)=>ep[r.k]=i+1); });
+    const out = {}; const N = {QB:24, RB:36, WR:48, TE:18};
+    POS.forEach(q=>{ const rows = M.rows.filter(r=>r.pos===q && (pp[r.k]<=N[q] || ep[r.k]<=N[q]) && pp[r.k] && ep[r.k]);
+      const R = M.R && M.R[q] || 0, prod = r => { const l = r.lines && r.lines[0]; return l ? (l.ppg - R)*l.g : -R*0.5; };
+      out[q] = {n:rows.length, ours:spearR(rows.map(r=>-pp[r.k]), rows.map(prod)), ecr:spearR(rows.map(r=>-ep[r.k]), rows.map(prod))}; });
+    return out;
+  }, [M, ecr0, comps]);
+  return html`<div class="panel"><h2>Report card</h2>
+    <p class="sub">How well the order of each position matched what actually happened (1 = perfect, 0 = no better than random).</p>
+    ${res ? html`<h3>This season so far</h3>
+      <p class="sub">The board as it stood before week 1 (last season's games, no news) against expert consensus from ${ecr0.date}, judged on points above replacement so far in your scoring. ${M.rows.find(r=>r.lines&&r.lines[0]) ? '' : ''}A part-season is a small sample, and dynasty value is about years, not weeks.</p>
+      <div class="tscroll"><table><thead><tr><th>Pos</th><th>Players</th><th>This board</th><th>Experts</th></tr></thead><tbody>
+      ${POS.map(q=>{ const x = res[q]; return html`<tr key=${q}><td>${q}</td><td>${x.n}</td><td class=${x.ours!=null&&x.ecr!=null&&x.ours>x.ecr?'win':''}>${x.ours==null?'–':fmt(x.ours,2)}</td><td class=${x.ours!=null&&x.ecr!=null&&x.ecr>x.ours?'win':''}>${x.ecr==null?'–':fmt(x.ecr,2)}</td></tr>`; })}
+      </tbody></table></div>` : html`<p class="note">This season's scorecard appears once there's a saved pre-week-1 expert snapshot for ${S||'this season'} (dynasty format only).</p>`}
+    <h3>Past seasons (backtests)</h3>
+    <p class="sub">Boards rebuilt as they would have looked before each season, judged on the next two seasons. Experts see offseason news (releases, injuries, depth charts) the game logs can't, which is most of their preseason edge.</p>
+    <div class="tscroll"><table><thead><tr><th>Pos</th><th>This board, 2021–24</th><th>Experts, 2021–24</th><th>Formula alone, 2012–22</th><th>With similar players, 2012–22</th></tr></thead><tbody>
+      <tr><td>QB</td><td>0.59</td><td class="win">0.70</td><td>0.59</td><td>0.66</td></tr>
+      <tr><td>RB</td><td>0.59</td><td class="win">0.64</td><td>0.54</td><td>0.54</td></tr>
+      <tr><td>WR</td><td>0.69</td><td class="win">0.71</td><td>0.68</td><td>0.69</td></tr>
+      <tr><td>TE</td><td>0.49</td><td class="win">0.52</td><td>0.50</td><td>0.52</td></tr>
+    </tbody></table></div>
+    <p class="note" style=${{marginTop:6}}>Left two columns: the four seasons where expert history exists, a small sample. Right two: the longer history, judged on the next three seasons, with no expert column because the expert archive starts in 2020.</p>
+  </div>`;
+}
+// ---- Where we disagree with experts: biggest gaps between this board's position rank and expert consensus, with what's
+// driving each one, so mistakes (a missed injury, a wrong depth chart) are quick to spot.
+function whyGap(r, M){ const st = r.st || {}, c = st.comp, out = [], we = r.prank < r.ecrPos;
+  if(c && c.vRank && c.cRank && Math.abs(Math.log(c.cRank/c.vRank)) > 0.4) out.push(`similar players rank him ${r.pos}${c.cRank}, the formula ${r.pos}${c.vRank}`);
+  if(r.inj) out.push(`on ${r.inj}`); else if(st.miss >= 1) out.push(`expected to miss ~${fmt(st.miss,0)} games`);
+  if(st.una) out.push('not on a roster');
+  if(st.bench) out.push(`not playing much (−${fmt(100*st.bench,0)}%)`);
+  if(st.rookie) out.push(`no NFL games yet; draft pick ${r.dp||'?'}`);
+  const l = r.lines && r.lines[0], g = r.w && r.w.gms || 0;
+  if(!st.rookie && g < 17) out.push(`only ${Math.round(g)} career games to go on`);
+  const age = r.ageNow, old = {QB:32, RB:27, WR:29, TE:29}[r.pos];
+  if(age >= old) out.push(we ? `age ${fmt(age,1)}: we think he holds up longer` : `age ${fmt(age,1)}: we fade him faster`);
+  else if(age < 24 && !we) out.push(`age ${fmt(age,1)}: experts pay for upside the stats haven't shown yet`);
+  if(c && c.ref && c.ref.du!=null && c.ref.du < 0.7) out.push(`played ${fmt(100*c.ref.du,0)}% of possible games lately`);
+  if(l && l.g >= 3){ const ppgRank = M.rows.filter(x=>x.pos===r.pos && x.lines && x.lines[0] && x.lines[0].g>=3 && x.lines[0].ppg > l.ppg).length + 1; if(Math.abs(ppgRank - r.ecrPos) > 8) out.push(`${r.pos}${ppgRank} in scoring per game this season`); }
+  if(st.env && Math.abs(st.env.f-1) >= 0.03) out.push(`offense ${st.env.f>1?'+':'−'}${fmt(100*Math.abs(st.env.f-1),0)}%`);
+  if(st.out) out.push('your outlook note');
+  return out.slice(0,4); }
+function Disagree({M, onOpen}){
+  const [side, setSide] = useState('up');
+  if(!M || !M.rows.some(r=>r.ecrPos)) return null;
+  const N = {QB:30, RB:45, WR:60, TE:24};
+  const rows = M.rows.filter(r=>r.ecrPos && (r.prank<=N[r.pos] || r.ecrPos<=N[r.pos])).map(r=>({r, g:Math.log(r.ecrPos/r.prank)}));
+  const list = rows.filter(x=> side==='up' ? x.g>0 : x.g<0).sort((a,b)=>Math.abs(b.g)-Math.abs(a.g)).slice(0,15);
+  return html`<div class="panel"><h2>Where we disagree with experts</h2>
+    <p class="sub">The biggest gaps between this board's position rank and expert consensus, and what's behind each. A gap isn't a mistake by itself, but this is the first place to look for one.</p>
+    <div class="controls"><${Seg} label="Direction" value=${side} onChange=${setSide} opts=${[['up','We like more'],['down','We like less']]}/></div>
+    <div class="list">${list.map(({r})=>html`<button key=${r.k} class="row" onClick=${()=>onOpen(r)} style=${{display:'block',textAlign:'left'}}>
+      <div style=${{display:'flex',justifyContent:'space-between',gap:'8px'}}><b>${r.n}</b><span class="mono">${r.pos}${r.prank} · experts ${r.pos}${r.ecrPos}</span></div>
+      <div class="note" style=${{margin:'2px 0 0'}}>${whyGap(r, M).join(' · ') || 'production and age, no single driver'}</div></button>`)}</div>
+  </div>`;
+}
+function Method({M, meta, players, cfg, D, onOpen}){
   const R = M ? M.R : null;
-  return html`<div class="panel"><h2>How a value is built</h2>
+  return html`<${Scorecard} M=${M} players=${players} cfg=${cfg} ecr0=${D&&D.ecr0} comps=${D&&D.comps} adj=${D&&D.adj&&D.adj.rows} classes=${D&&D.classes&&D.classes.years}/>
+  <${Disagree} M=${M} onOpen=${onOpen}/>
+  <div class="panel"><h2>How a value is built</h2>
       <p>Every number on this board comes from one formula run over each player's real game logs. Nothing is copied from another site's rankings.</p>
       <h3>1. Production, scored your way</h3>
       <p class="sub">Each season's raw stats (yards, touchdowns, catches, turnovers) are scored with your settings, then averaged per game. This season counts more than last season; two seasons ago counts least, except at TE where it keeps real weight. Values are scaled so the top 200 always add up to the same total: when a new season starts and everyone's sample resets, the whole board doesn't drop; only players who really rise or fall move. Running backs lean hardest on this season (3.8× a game), because roles at RB change fastest and the backtest ranks RBs better that way.</p>
@@ -1370,6 +1445,7 @@ function App(){
           const r = await fetch('data.json', {cache:'no-store'}); if(!r.ok) throw new Error('no data');
           const d = await r.json(), o = {};
           ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{ o[k] = d[k]||null; o['_'+k] = true; });
+          if(d.ecr0) o.ecr0 = d.ecr0;
           setD(o);
           fetch('comps.json').then(x=>x.ok?x.json():null).then(c=>{ if(c && c.v===2 && alive) setD(o2=>({...o2, comps:c})); }).catch(()=>{});
         }catch(e){ setStatus(s=>({...s, err:'Sign in to claude.ai to see the board.'})); }
@@ -1378,6 +1454,7 @@ function App(){
       ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{
         unsubs.push(db.doc('board/'+k).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; setD(o=>({...o, [k]:d, ['_'+k]:true})); }, ()=>{}));
       });
+      unsubs.push(db.doc('board/ecr0').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d) setD(o=>({...o, ecr0:d})); }, ()=>{}));   // optional: report card
       // comparable-players library, stored in four parts (optional: the board works without it)
       { const parts = {}; [1,2,3,4,5,6,7,8].forEach(i=>unsubs.push(db.doc('board/comps'+i).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(!d || d.v!==2) return; parts[i] = d;
           const of = d.of, ids = Array.from({length:of}, (_,j)=>j+1); if(ids.every(j=>parts[j] && parts[j].of===of && parts[j].built===d.built)) setD(o=>({...o, comps:mergeComps(ids.map(j=>parts[j]))})); }, ()=>{}))); }
@@ -1449,7 +1526,7 @@ function App(){
         : view==='chart' ? html`<${Chart} M=${M} mine=${mine} onOpen=${r=>setOpen(r.k)}/>`
         : view==='trade' ? html`<${Trade} M=${M}/>`
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
-        : html`<${Method} M=${M} meta=${D.meta}/>`}
+        : html`<${Method} M=${M} meta=${D.meta} players=${players} cfg=${cfg} D=${D} onOpen=${r=>setOpen(r.k)}/>`}
     </main>
     <nav class="tabs" aria-label="Sections"><div class="wrap">${TABS.map(([v,l,ic])=>html`<button key=${v} aria-current=${view===v?'page':null} onClick=${()=>go(v)}>${ic}<span>${l}</span></button>`)}</div></nav>
     ${openRow ? html`<${Sheet} r=${openRow} M=${M} canEdit=${canEdit} onAdj=${saveAdj} onInj=${saveInj} onOut=${saveOut} starred=${mine.has(openRow.k)} onStar=${toggleMine} H=${hist && hist.key===histKey ? hist.H : null} onClose=${()=>setOpen(null)}/>` : null}`;

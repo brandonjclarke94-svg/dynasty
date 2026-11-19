@@ -14,7 +14,7 @@ if page != '-':
         '</head><body>' + body + '</body></html>')
   open(os.path.join(site, 'index.html'), 'w', encoding='utf-8').write(html)
 data = {}
-for k in ['QB', 'RB', 'WR', 'TE', 'meta', 'adj', 'defaults', 'classes', 'injuries', 'outlook']:
+for k in ['QB', 'RB', 'WR', 'TE', 'meta', 'adj', 'defaults', 'classes', 'injuries', 'outlook', 'ecr0']:
     p = os.path.join(dbdir, k + '.json')
     if os.path.exists(p):
         j = json.load(open(p, encoding='utf-8')); data[k] = j.get('data', j) if isinstance(j, dict) and 'data' in j and 'id' in j else j
