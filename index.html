@@ -1251,9 +1251,22 @@ const lgSummary = lg => { const c = leagueCfg(lg, false); return `${c.teams} tea
 // Sleeper player id -> board key: the builder stores each player's Sleeper id; the separate map covers boards built before that
 function slIndex(players, slmap){ const m = {...((slmap&&slmap.m)||{})}; players.forEach(p=>{ if(p.sl) m[p.sl] = p.k; }); return m; }
 // what the market pays: the board value at the player's expert-consensus rank (other managers trade on consensus)
-function marketFn(M){ const lad = {}, nE = {}; POS.forEach(q=>{ const P = M.rows.filter(r=>r.pos===q); lad[q] = P.map(r=>r.v).sort((a,b)=>b-a); nE[q] = P.filter(r=>r.ecrPos).length; });
-  return r => { if(!r || r.pos==='PK') return r ? r.v : 0; const L = lad[r.pos]; if(!L || !L.length) return r.v;
-    return r.ecrPos ? L[Math.min(L.length, r.ecrPos)-1] : Math.min(r.v, L[Math.min(L.length-1, nE[r.pos])]||0); }; }
+// what the market pays. With FantasyCalc (public values from real dynasty trades, fetched daily for each QB count, team count
+// and PPR) the market is the board's value at the player's FantasyCalc overall rank, so it keeps the public's view across
+// positions; without it, the board value at his expert-consensus position rank. Either way, the board's own value scale.
+function fcVariant(c){ const near = (x, xs) => xs.reduce((a,b)=>Math.abs(b-x)<Math.abs(a-x)?b:a); return `${(c.qb>=2||c.sf)?2:1}-${near(c.teams,[10,12,14])}-${near(c.ppr,[0,0.5,1])}`; }
+function marketFn(M, fc, idx){
+  const map = fc && fc.v && fc.v[fcVariant(M.cfg)];
+  if(map && idx && !M.redraft){
+    const fv = {}; Object.entries(map).forEach(([sid, val])=>{ const k = idx[sid]; if(k && !(fv[k] > val)) fv[k] = val; });
+    const P = M.rows.filter(r=>fv[r.k]).sort((a,b)=>fv[b.k]-fv[a.k]), lad = M.rows.map(r=>r.v).sort((a,b)=>b-a), oR = {}, pR = {}, cnt = {};
+    P.forEach((r,i)=>{ oR[r.k] = i+1; cnt[r.pos] = (cnt[r.pos]||0)+1; pR[r.k] = cnt[r.pos]; });
+    const f = r => { if(!r || r.pos==='PK') return r ? r.v : 0; return oR[r.k] ? lad[Math.min(lad.length, oR[r.k])-1] : Math.min(r.v, lad[Math.min(lad.length-1, P.length)]||0); };
+    f.rank = r => pR[r.k] || null; f.label = 'Public'; f.src = 'FantasyCalc'; f.at = fc.at; f.tep = M.cfg.tep>0; return f; }
+  const lad = {}, nE = {}; POS.forEach(q=>{ const P = M.rows.filter(r=>r.pos===q); lad[q] = P.map(r=>r.v).sort((a,b)=>b-a); nE[q] = P.filter(r=>r.ecrPos).length; });
+  const f = r => { if(!r || r.pos==='PK') return r ? r.v : 0; const L = lad[r.pos]; if(!L || !L.length) return r.v;
+    return r.ecrPos ? L[Math.min(L.length, r.ecrPos)-1] : Math.min(r.v, L[Math.min(L.length-1, nE[r.pos])]||0); };
+  f.rank = r => r.ecrPos || null; f.label = 'Experts'; f.src = 'expert consensus'; return f; }
 // best starting lineup (dedicated slots first, then flex, then superflex), by a value function
 function lineup(rows, c, val){ const s = rows.filter(r=>r.pos!=='PK').slice().sort((a,b)=>val(b)-val(a)), used = new Set(), by = {QB:0,RB:0,WR:0,TE:0}; let tot = 0;
   const take = (ok, n) => { for(let i=0; i<s.length && n>0; i++){ const r = s[i]; if(used.has(r) || !ok(r.pos)) continue; used.add(r); n--; const v = val(r); tot += v; by[r.pos] += v; } };
@@ -1311,9 +1324,9 @@ function findTrades(teams, me, c, mv){
     pick.push(x); per[x.ti] = (per[x.ti]||0)+1; x.get.forEach(r=>gotK[r.k]=1); x.give.forEach(r=>gaveK[r.k]=(gaveK[r.k]||0)+1); }
   return pick; }
 // one line of why, per player: where the board and the experts disagree
-function whyLine(r, side){ if(r.pos==='PK' || !r.ecrPos || !r.prank) return null;
-  if(side==='get' && r.prank < r.ecrPos*0.8) return `${r.n}: board ${r.pos}${r.prank}, experts ${r.pos}${r.ecrPos}. The market rates him lower than we do.`;
-  if(side==='give' && r.prank > r.ecrPos*1.25) return `${r.n}: experts ${r.pos}${r.ecrPos}, board ${r.pos}${r.prank}. You sell at the market's higher price.`;
+function whyLine(r, side, mv){ const pr = mv && mv.rank(r); if(r.pos==='PK' || !pr || !r.prank) return null; const lb = mv.label==='Public' ? 'public' : 'experts';
+  if(side==='get' && r.prank < pr*0.8) return `${r.n}: board ${r.pos}${r.prank}, ${lb} ${r.pos}${pr}. The market rates him lower than we do.`;
+  if(side==='give' && r.prank > pr*1.25) return `${r.n}: ${lb} ${r.pos}${pr}, board ${r.pos}${r.prank}. You sell at the market's higher price.`;
   return null; }
 const ordn = n => n+(['th','st','nd','rd'][(n%100-20)%10]||['th','st','nd','rd'][n%100]||'th');
 
@@ -1361,7 +1374,7 @@ function SleeperPanel({S, M, cfg, setCfg, hasFd, teams, me, setMe}){
 }
 
 // league picture: every team's starting lineup by position, ranked, with your team marked
-function LeagueView({teams, me, M, cfg, onOpen, onStar}){
+function LeagueView({teams, me, M, cfg, mv, onOpen, onStar}){
   const V = r => r.v, rows = teams.map((t,i)=>{ const l = lineup(t.rows, cfg, V), all = t.rows.reduce((a,r)=>a+r.v,0) + t.picks.reduce((a,p)=>a+p.v,0);
     const age = t.rows.length ? l.used.size ? [...l.used].reduce((a,r)=>a+(r.ageNow||0),0)/l.used.size : 0 : 0; return {t, i, l, all, age}; });
   const rk = {}; ['tot', ...POS].forEach(q=>{ const s = rows.slice().sort((a,b)=>(q==='tot'?b.l.tot-a.l.tot:b.l.by[q]-a.l.by[q])); s.forEach((x,j)=>(rk[x.i]=rk[x.i]||{})[q]=j+1); });
@@ -1375,23 +1388,23 @@ function LeagueView({teams, me, M, cfg, onOpen, onStar}){
       <div class="controls"><button class="btn" onClick=${()=>onStar(mine.t.rows.map(r=>r.k))}>Star my roster on the board</button></div></div>` : null}
     <div class="panel"><h2>League value</h2><p class="sub">Every team's players and picks on this board. The darker part of each bar is the starting lineup.</p>
       <div class="lgbars">${byAll.map(x=>html`<div key=${x.t.rid} class=${'lgb'+(x.i===me?' me':'')}><span class="nm">${x.t.name}</span><div class="bar"><i class="all" style=${{width:(100*x.all/mx)+'%'}}></i><i class="st" style=${{width:(100*x.l.tot/mx)+'%'}}></i></div><b class="mono">${fmtV(x.all)}</b></div>`)}</div></div>
-    ${mine ? html`<div class="panel"><h2>Your roster</h2><div class="tblwrap"><table><thead><tr><th>Player</th><th>Board</th><th>Experts</th><th>Value</th></tr></thead><tbody>
-      ${mine.t.rows.slice().sort((a,b)=>b.v-a.v).map(r=>html`<tr key=${r.k} class="clk" onClick=${()=>onOpen(r)}><td class="nm"><${PosTag} p=${r.pos}/> ${r.n}${mine.l.used.has(r) ? html` <span class="tm fa">START</span>` : null}</td><td>${r.pos}${r.prank}</td><td>${r.ecrPos ? r.pos+r.ecrPos : '–'}</td><td>${fmtV(r.v)}</td></tr>`)}
+    ${mine ? html`<div class="panel"><h2>Your roster</h2><div class="tblwrap"><table><thead><tr><th>Player</th><th>Board</th><th>${mv.label}</th><th>Value</th></tr></thead><tbody>
+      ${mine.t.rows.slice().sort((a,b)=>b.v-a.v).map(r=>html`<tr key=${r.k} class="clk" onClick=${()=>onOpen(r)}><td class="nm"><${PosTag} p=${r.pos}/> ${r.n}${mine.l.used.has(r) ? html` <span class="tm fa">START</span>` : null}</td><td>${r.pos}${r.prank}</td><td>${mv.rank(r) ? r.pos+mv.rank(r) : '–'}</td><td>${fmtV(r.v)}</td></tr>`)}
       ${mine.t.picks.map(p=>html`<tr key=${p.k}><td class="nm"><span class="pos PK">PK</span> ${p.n}</td><td>–</td><td>–</td><td>${fmtV(p.v)}</td></tr>`)}</tbody></table></div></div>` : null}`;
 }
 
 function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
   const [res, setRes] = useState(null);
-  const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v);
+  const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+mv.src+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v);
   useEffect(()=>{ setRes(null); const t = setTimeout(()=>{ try{ setRes({key, list:findTrades(teams, me, M.cfg, mv)}); }catch(e){ console.error(e); setRes({key, list:[]}); } }, 30); return ()=>clearTimeout(t); }, [key]);
   const T = teams[me];
   return html`<div class="panel"><h2>Trade finder</h2>
-      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at expert-consensus prices. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start.</p>
+      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at ${mv.src==='FantasyCalc' ? 'public trade values (FantasyCalc, from real dynasty trades)' : 'expert-consensus prices'}. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start.</p>
       <div class="fld" style=${{marginTop:12}}><label>Your team's direction<span class="hint">Win now weighs your starting lineup more; rebuild weighs long-term value and picks.</span></label>
         <${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/></div></div>
     ${!res || res.key!==key ? html`<div class="panel empty"><b>Looking through ${teams.length-1} rosters</b><span>Checking a few thousand packages.</span></div>`
       : !res.list.length ? html`<div class="panel empty"><b>No clear wins right now</b><span>Nothing passed both tests: better for you on this board and fair to them at market prices. Try another team direction.</span></div>`
-      : res.list.map((x,i)=>{ const t = teams[x.ti], why = [...x.get.map(r=>whyLine(r,'get')), ...x.give.map(r=>whyLine(r,'give'))].filter(Boolean);
+      : res.list.map((x,i)=>{ const t = teams[x.ti], why = [...x.get.map(r=>whyLine(r,'get',mv)), ...x.give.map(r=>whyLine(r,'give',mv))].filter(Boolean);
         const pg = POS.map(q=>[q, x.myBy[1][q]-x.myBy[0][q]]).sort((a,b)=>b[1]-a[1])[0], tg = POS.map(q=>[q, x.theirBy[1][q]-x.theirBy[0][q]]).sort((a,b)=>b[1]-a[1])[0];
         const li = r => html`<li key=${r.k}>${r.pos==='PK' ? html`<span class="pos PK">PK</span>` : html`<${PosTag} p=${r.pos}/>`} ${r.n}<span class="mono">${fmtV(r.v)}</span></li>`;
         return html`<div class="panel tf" key=${i}><div class="tfhead"><span class="eyebrow">With ${t.name}</span><button class="btn" onClick=${()=>onLoad(x.give.map(r=>r.k), x.get.map(r=>r.k), x.ti)}>Open in calculator</button></div>
@@ -1399,10 +1412,10 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
           <div class="tfstats"><div><span>Your value</span><b class=${'mono '+(x.myGain>=0?'up':'dn')}>${x.myGain>=0?'+':''}${fmt(x.myGain)}</b></div><div><span>Your starters</span><b class=${'mono '+(x.myLine>=0.5?'up':x.myLine<=-0.5?'dn':'')}>${x.myLine>=0?'+':''}${fmt(x.myLine)}</b></div><div><span>Market says</span><b class="mono">${Math.abs(x.theirMk)<0.04*Math.max(x.gM,x.rM)?'Even':x.theirMk>0?'Them +'+fmt(100*x.theirMk/Math.max(1,x.rM),0)+'%':'You +'+fmt(-100*x.theirMk/Math.max(1,x.gM),0)+'%'}</b></div></div>
           <ul class="why">${why.map(w=>html`<li key=${w}>${w}</li>`)}
             ${x.myLine>=0.5 && pg[1]>0.5 ? html`<li>${x.rkMe[pg[0]] > Math.ceil(x.nT/3) ? 'Fills a need' : 'Upgrades a strength'}: your ${pg[0]} starters rank ${ordn(x.rkMe[pg[0]])} of ${x.nT}, and this adds ${fmt(pg[1])}.</li>` : null}
-            ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>0?', and they win the trade at market prices':''}.</li>` : x.theirMk>0 ? html`<li>Why they'd say yes: at consensus prices they come out ahead.</li>` : null}</ul></div>`; })}`;
+            ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>=0.04*Math.max(x.gM,x.rM)?', and they win the trade at market prices':''}.</li>` : x.theirMk>=0.04*Math.max(x.gM,x.rM) ? html`<li>Why they'd say yes: at market prices they come out ahead.</li>` : null}</ul></div>`; })}`;
 }
 
-function Trade({M, cfg, setCfg, players, slmap, hasFd, onOpen, onStar}){
+function Trade({M, cfg, setCfg, players, slmap, fc, hasFd, onOpen, onStar}){
   const S = useSleeper();
   const idx = useMemo(()=>slIndex(players, slmap), [players, slmap]);
   const teams = useMemo(()=>S.L && M ? leagueTeams(S.L, M, idx, Date.now()) : null, [S.L, M, idx]);
@@ -1415,7 +1428,7 @@ function Trade({M, cfg, setCfg, players, slmap, hasFd, onOpen, onStar}){
   const [sideT, setSideT] = useState(()=>lsGet('dvb.tradeTeams', [null, null]));   // which league team each side is (roster ids)
   useEffect(()=>lsSet('dvb.trade', sides), [sides]);
   useEffect(()=>lsSet('dvb.tradeTeams', sideT), [sideT]);
-  const mv = useMemo(()=>M ? marketFn(M) : null, [M]);
+  const mv = useMemo(()=>M ? marketFn(M, fc, idx) : null, [M, fc, idx]);
   if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The trade tools open once the board has players.</span></div>`;
   const connected = !!teams;
   const view = !connected && tab!=='calc' ? 'calc' : tab;
@@ -1423,7 +1436,7 @@ function Trade({M, cfg, setCfg, players, slmap, hasFd, onOpen, onStar}){
   return html`<${SleeperPanel} S=${S} M=${M} cfg=${cfg} setCfg=${setCfg} hasFd=${hasFd} teams=${teams} me=${me} setMe=${setMe}/>
     ${connected ? html`<div class="subtabs"><${Seg} label="Trade tools" value=${view} onChange=${go} opts=${[['find','Trade finder'],['calc','Calculator'],['league','League']]}/></div>` : null}
     ${view==='find' ? html`<${Finder} teams=${teams} me=${me} M=${M} cfg=${cfg} setCfg=${setCfg} mv=${mv} onLoad=${loadTrade}/>`
-      : view==='league' ? html`<${LeagueView} teams=${teams} me=${me} M=${M} cfg=${cfg} onOpen=${onOpen} onStar=${onStar}/>`
+      : view==='league' ? html`<${LeagueView} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} onOpen=${onOpen} onStar=${onStar}/>`
       : html`<${Calc} M=${M} sides=${sides} setSides=${setSides} sideT=${sideT} setSideT=${setSideT} teams=${teams} me=${me} mv=${mv} onOpen=${onOpen}/>`}`;
 }
 
@@ -1461,7 +1474,7 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
     const a = lineup(t.rows, c, r=>r.v), b = lineup([...t.rows.filter(r=>!out.has(r)), ...inn], c, r=>r.v); return {t, a, b}; });
   const later = yr.map(y=>y.slice(2).reduce((a,x)=>a+x,0)), soon = yr.map(y=>y.slice(0,2).reduce((a,x)=>a+x,0));
   const line = r => { const l = r.lines && r.lines[0], tr = r.d30;
-    return r.pos==='PK' ? 'Rookie pick' : [r.ageNow ? 'Age '+fmt(r.ageNow,1) : null, l && l.g ? fmt(l.ppg,1)+' PPG' : 'No games yet', 'Board '+r.pos+r.prank+(r.ecrPos ? ' · Experts '+r.pos+r.ecrPos : ''), tr!=null && Math.abs(tr)>=1 ? (tr>0?'▲ ':'▼ ')+fmt(Math.abs(tr))+' in 30 days' : null, r.inj || null].filter(Boolean).join(' · '); };
+    return r.pos==='PK' ? 'Rookie pick' : [r.ageNow ? 'Age '+fmt(r.ageNow,1) : null, l && l.g ? fmt(l.ppg,1)+' PPG' : 'No games yet', 'Board '+r.pos+r.prank+(mv.rank(r) ? ' · '+mv.label+' '+r.pos+mv.rank(r) : '')+(mv.label==='Public' && r.ecrPos ? ' · Experts '+r.pos+r.ecrPos : ''), tr!=null && Math.abs(tr)>=1 ? (tr>0?'▲ ':'▼ ')+fmt(Math.abs(tr))+' in 30 days' : null, r.inj || null].filter(Boolean).join(' · '); };
   const teamSel = i => teams ? html`<select class="sel tsel" aria-label=${'Side '+(i?'B':'A')+' team'} value=${sideT[i]!=null ? sideT[i] : (i===0 && teams[me] ? teams[me].rid : '')} onChange=${e=>{ const v = e.target.value; const st = sideT.slice(); st[i] = v==='' ? null : +v; setSideT(st); }}>
       <option value="">Any player</option>${teams.map(t=>html`<option key=${t.rid} value=${t.rid}>${t.name}</option>`)}</select>` : null;
   const quick = i => { const t = sideTeam(i); if(!t) return null; const have = new Set([...sides[0], ...sides[1]]); const pool = [...t.rows, ...t.picks].filter(r=>!have.has(r.k)).sort((a,b)=>b.v-a.v);
@@ -1483,12 +1496,12 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
         <div class="ybars">${yr[0].map((_,j)=>html`<div key=${j} class="yb"><div class="yp">${[0,1].map(i=>html`<i key=${i} class=${'s'+i} style=${{height:(100*yr[i][j]/ymx)+'%'}} title=${fmt(yr[i][j])}></i>`)}</div><span>${"'"+String(M.season+j).slice(2)}</span></div>`)}</div>
         <div class="legend"><span><i class="s0"></i>${lab(0)}</span><span><i class="s1"></i>${lab(1)}</span></div>
         <p class="note">Next two seasons: ${fmt(soon[0])} vs ${fmt(soon[1])}. After that: ${fmt(later[0])} vs ${fmt(later[1])}. ${(soon[0]>soon[1]) !== (later[0]>later[1]) ? `${lab(soon[0]>soon[1]?0:1)} holds more value in the next two seasons; ${lab(soon[0]>soon[1]?1:0).replace(/^W/,'w')} holds more after that.` : ''}</p></div>
-      <div class="panel"><h3 style=${{marginTop:0}}>Board vs market</h3><p class="note">The board's value against what expert consensus would pay. A side the market rates higher than the board is a good one to send.</p>
+      <div class="panel"><h3 style=${{marginTop:0}}>Board vs market</h3><p class="note">The board's value against what ${mv.src==='FantasyCalc' ? 'the public trade market (FantasyCalc) pays'+(mv.tep ? '; its values have no TE premium' : '') : 'expert consensus would pay'}. A side the market rates higher than the board is a good one to send.</p>
         ${[0,1].map(i=>{ const m2 = Math.max(E[0],E[1],EM[0],EM[1])||1; return html`<div key=${i} class="bvm"><b>${lab(i)}</b>
           <div class="bvr"><span>Board</span><div class="bar"><i class=${'s'+i} style=${{width:(100*E[i]/m2)+'%'}}></i></div><span class="mono">${fmt(E[i])}</span></div>
           <div class="bvr"><span>Market</span><div class="bar"><i class=${'s'+i+' mk'} style=${{width:(100*EM[i]/m2)+'%'}}></i></div><span class="mono">${fmt(EM[i])}</span></div></div>`; })}
         <p class="note">${(()=>{ const bd = E[0]-E[1], md = EM[0]-EM[1], m0 = Math.max(EM[0],EM[1])||1;
-          const pct = fmt(100*Math.abs(md)/m0,0); return Math.abs(md)/m0<0.05 ? 'At market prices the two packages are close to even.' : Math.sign(bd)!==Math.sign(md) ? `The market sees it the other way: at consensus prices ${lab(md>0?0:1).replace(/^W/,'w')} is worth ${pct}% more.` : `The market agrees: ${lab(md>0?0:1).replace(/^W/,'w')} is worth ${pct}% more at consensus prices.`; })()}</p></div>
+          const pct = fmt(100*Math.abs(md)/m0,0); return Math.abs(md)/m0<0.05 ? 'At market prices the two packages are close to even.' : Math.sign(bd)!==Math.sign(md) ? `The market sees it the other way: at market prices ${lab(md>0?0:1).replace(/^W/,'w')} is worth ${pct}% more.` : `The market agrees: ${lab(md>0?0:1).replace(/^W/,'w')} is worth ${pct}% more at market prices.`; })()}</p></div>
       <div class="panel"><h3 style=${{marginTop:0}}>Age and positions</h3>
         ${[0,1].map(i=>{ const tv = items[i].reduce((a,r)=>a+r.v,0)||1, by = {}; items[i].forEach(r=>by[r.pos]=(by[r.pos]||0)+r.v);
           return html`<div key=${i} class="bvm"><b>${lab(i)}</b><span class="note"> · ${age[i]!=null ? 'value-weighted age '+fmt(age[i],1) : 'picks only'}</span>
@@ -1750,6 +1763,7 @@ function App(){
           const d = await r.json(), o = {};
           ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{ o[k] = d[k]||null; o['_'+k] = true; });
           if(d.ecr0) o.ecr0 = d.ecr0; if(d.slmap) o.slmap = d.slmap;
+          fetch('fc.json').then(x=>x.ok?x.json():null).then(f=>{ if(f && f.v && alive) setD(o2=>({...o2, fc:f})); }).catch(()=>{});   // public trade values (FantasyCalc), refreshed daily
           setD(o);
           fetch('comps.json').then(x=>x.ok?x.json():null).then(c=>{ if(c && c.v===2 && alive) setD(o2=>({...o2, comps:c})); }).catch(()=>{});
         }catch(e){ setStatus(s=>({...s, err:'Sign in to claude.ai to see the board.'})); }
@@ -1758,6 +1772,7 @@ function App(){
       ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{
         unsubs.push(db.doc('board/'+k).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; setD(o=>({...o, [k]:d, ['_'+k]:true})); }, ()=>{}));
       });
+      unsubs.push(db.doc('board/fc').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d && d.v) setD(o=>({...o, fc:d})); }, ()=>{}));   // public trade values (FantasyCalc)
       unsubs.push(db.doc('board/slmap').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d) setD(o=>({...o, slmap:d})); }, ()=>{}));   // Sleeper ids (older boards)
       unsubs.push(db.doc('board/ecr0').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d) setD(o=>({...o, ecr0:d})); }, ()=>{}));   // optional: report card
       // comparable-players library, stored in four parts (optional: the board works without it)
@@ -1829,7 +1844,7 @@ function App(){
         : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
         : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine}/>`
         : view==='chart' ? html`<${Chart} M=${M} mine=${mine} onOpen=${r=>setOpen(r.k)}/>`
-        : view==='trade' ? html`<${Trade} M=${M} cfg=${cfg} setCfg=${setCfg} players=${players} slmap=${D.slmap||null} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))} onOpen=${r=>setOpen(r.k)} onStar=${keys=>{ const s = new Set(keys); setMine(s); lsSet('dvb.mine', [...s]); }}/>`
+        : view==='trade' ? html`<${Trade} M=${M} cfg=${cfg} setCfg=${setCfg} players=${players} slmap=${D.slmap||null} fc=${D.fc||null} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))} onOpen=${r=>setOpen(r.k)} onStar=${keys=>{ const s = new Set(keys); setMine(s); lsSet('dvb.mine', [...s]); }}/>`
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
         : html`<${Method} M=${M} meta=${D.meta} players=${players} cfg=${cfg} D=${D} onOpen=${r=>setOpen(r.k)}/>`}
     </main>
