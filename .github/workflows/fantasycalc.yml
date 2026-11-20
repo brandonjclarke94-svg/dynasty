@@ -1,0 +1,20 @@
+name: FantasyCalc values
+on:
+  schedule:
+    - cron: '17 11 * * *'   # daily
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/fantasycalc.yml', 'tools/fetch_fc.py']
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/fetch_fc.py
+      - run: |
+          git config user.name "brandonjclarke94-svg"
+          git config user.email "brandonjclarke94-svg@users.noreply.github.com"
+          git add fc.json
+          git diff --cached --quiet || (git commit -m "FantasyCalc values $(date -u +%F)" && git pull --rebase -q && git push)
