@@ -1287,9 +1287,12 @@ function marketFn(M, fc, idx){
   const map = fc && fc.v && fc.v[fcVariant(M.cfg)];
   if(map && idx && !M.redraft){
     const fv = {}; Object.entries(map).forEach(([sid, val])=>{ const k = idx[sid]; if(k && !(fv[k] > val)) fv[k] = val; });
-    const P = M.rows.filter(r=>fv[r.k]).sort((a,b)=>fv[b.k]-fv[a.k]), lad = M.rows.map(r=>r.v).sort((a,b)=>b-a), oR = {}, pR = {}, cnt = {};
-    P.forEach((r,i)=>{ oR[r.k] = i+1; cnt[r.pos] = (cnt[r.pos]||0)+1; pR[r.k] = cnt[r.pos]; });
-    const f = r => { if(!r || r.pos==='PK') return r ? r.v : 0; return oR[r.k] ? lad[Math.min(lad.length, oR[r.k])-1] : Math.min(r.v, lad[Math.min(lad.length-1, P.length)]||0); };
+    // FantasyCalc's own prices, converted to board units with ONE scale (the median board/FantasyCalc ratio among its top
+    // 120), so the public's view of how players compare (two mid starters vs one young back) is kept as it is
+    const P = M.rows.filter(r=>fv[r.k]).sort((a,b)=>fv[b.k]-fv[a.k]), pR = {}, cnt = {};
+    P.forEach(r=>{ cnt[r.pos] = (cnt[r.pos]||0)+1; pR[r.k] = cnt[r.pos]; });
+    const rat = P.slice(0,120).filter(r=>r.v>0).map(r=>r.v/fv[r.k]).sort((a,b)=>a-b), k = rat.length ? rat[rat.length>>1] : 0, low = P.length ? fv[P[P.length-1].k] : 0;
+    const f = r => { if(!r || r.pos==='PK') return r ? r.v : 0; return fv[r.k] ? k*fv[r.k] : Math.min(r.v, k*low); };
     f.rank = r => pR[r.k] || null; f.label = 'Public'; f.src = 'FantasyCalc'; f.at = fc.at; f.tep = M.cfg.tep>0; return f; }
   const lad = {}, nE = {}; POS.forEach(q=>{ const P = M.rows.filter(r=>r.pos===q); lad[q] = P.map(r=>r.v).sort((a,b)=>b-a); nE[q] = P.filter(r=>r.ecrPos).length; });
   const f = r => { if(!r || r.pos==='PK') return r ? r.v : 0; const L = lad[r.pos]; if(!L || !L.length) return r.v;
@@ -1333,19 +1336,21 @@ function findTrades(teams, me, c, mv){
   // A team only takes on a position it isn't sending back if it isn't already loaded there (top third) and the new player starts.
   const nT = teams.length, top = Math.ceil(nT/3), pr = val => { const L = teams.map(t=>lineup(t.rows, c, val).by), R = teams.map(()=>({}));
     POS.forEach(q=>teams.map((_,i)=>i).sort((a,b)=>L[b][q]-L[a][q]).forEach((i,j)=>R[i][q]=j+1)); return R; };
-  const rkMe = pr(V)[me], rkMk = pr(mv);
+  const rkMe = pr(V)[me], rkMk = pr(V);
   const fits = (recv, sent, rk, after) => { const sq = new Set(sent.filter(r=>r.pos!=='PK').map(r=>r.pos));
     return recv.every(r=>r.pos==='PK' || sq.has(r.pos) || (rk[r.pos] > top && after.used.has(r))); };
-  teams.forEach((t, ti)=>{ if(ti===me) return; const theirBase = lineup(t.rows, c, mv), B = combos(pool(t));
+  teams.forEach((t, ti)=>{ if(ti===me) return; const theirBase = lineup(t.rows, c, V), B = combos(pool(t));
     for(const give of A) for(const get of B){ if(give.length + get.length > 3) continue;
       const gB = E(give, V), rB = E(get, V), pkg = Math.max(gB, rB), myGain = rB - gB; if(myGain < -0.06*pkg) continue;
       const gM = E(give, mv), rM = E(get, mv), theirMk = gM - rM; if(theirMk < -0.05*Math.max(gM, rM)) continue;
       const gs = new Set(give), rs = new Set(get);
-      const mine2 = lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, V), their2 = lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, mv);
+      const mine2 = lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, V), their2 = lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, V);
       const myLine = mine2.tot - myBase.tot, theirLine = their2.tot - theirBase.tot;
       if(theirMk + 0.5*theirLine < -0.03*pkg) continue;
+      if(theirLine < -0.5 && theirMk < 0.05*pkg) continue;   // weakening his starting lineup needs a clear market win to sell
       if(!fits(get, give, rkMe, mine2) || !fits(give, get, rkMk[ti], their2)) continue;
-      const score = myGain + lam*myLine; if(score < 0.04*pkg || myGain + myLine <= 0) continue;
+      if(theirMk > 0.25*Math.max(gM, rM)) continue;   // overpaying at market prices: your side could fetch more elsewhere
+      const score = myGain + lam*myLine - 0.5*Math.max(0, theirMk - 0.08*Math.max(gM, rM)); if(score < 0.04*pkg || myGain + myLine <= 0) continue;
       out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by], rkMe, rkThem:rkMk[ti], nT}); } });
   out.sort((a,b)=>b.score-a.score);
   const per = {}, gotK = {}, gaveK = {}, pick = [];
@@ -1475,7 +1480,7 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
         const li = r => html`<li key=${r.k}>${r.pos==='PK' ? html`<span class="pos PK">PK</span>` : html`<${PosTag} p=${r.pos}/>`} ${r.n}<span class="mono">${fmtV(r.v)}</span></li>`;
         return html`<div class="panel tf" key=${i}><div class="tfhead"><span class="eyebrow">With ${t.name}</span><button class="btn" onClick=${()=>onLoad(x.give.map(r=>r.k), x.get.map(r=>r.k), x.ti)}>Open in calculator</button></div>
           <div class="tfsides"><div><span class="lbl">You send</span><ul>${x.give.map(li)}</ul></div><div><span class="lbl">You get</span><ul>${x.get.map(li)}</ul></div></div>
-          <div class="tfstats"><div><span>Your value</span><b class=${'mono '+(x.myGain>=0?'up':'dn')}>${x.myGain>=0?'+':''}${fmt(x.myGain)}</b></div><div><span>Your starters</span><b class=${'mono '+(x.myLine>=0.5?'up':x.myLine<=-0.5?'dn':'')}>${x.myLine>=0?'+':''}${fmt(x.myLine)}</b></div><div><span>Market says</span><b class="mono">${Math.abs(x.theirMk)<0.04*Math.max(x.gM,x.rM)?'Even':x.theirMk>0?'Them +'+fmt(100*x.theirMk/Math.max(1,x.rM),0)+'%':'You +'+fmt(-100*x.theirMk/Math.max(1,x.gM),0)+'%'}</b></div></div>
+          <div class="tfstats"><div><span>Your value</span><b class=${'mono '+(x.myGain>=0?'up':'dn')}>${x.myGain>=0?'+':''}${fmt(x.myGain)}</b></div><div><span>Your starters</span><b class=${'mono '+(x.myLine>=0.5?'up':x.myLine<=-0.5?'dn':'')}>${x.myLine>=0?'+':''}${fmt(x.myLine)}</b></div><div><span>Market says</span><b class="mono">${Math.abs(x.theirMk)<0.04*Math.max(x.gM,x.rM)?'Even':(x.theirMk>0?'Them +':'You +')+fmt(100*Math.abs(x.theirMk)/Math.max(1,x.gM,x.rM),0)+'%'}</b></div></div>
           <ul class="why">${why.map(w=>html`<li key=${w}>${w}</li>`)}
             ${x.myLine>=0.5 && pg[1]>0.5 ? html`<li>${x.rkMe[pg[0]] > Math.ceil(x.nT/3) ? 'Fills a need' : 'Upgrades a strength'}: your ${pg[0]} starters rank ${ordn(x.rkMe[pg[0]])} of ${x.nT}, and this adds ${fmt(pg[1])}.</li>` : null}
             ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>=0.04*Math.max(x.gM,x.rM)?', and they win the trade at market prices':''}.</li>` : x.theirMk>=0.04*Math.max(x.gM,x.rM) ? html`<li>Why they'd say yes: at market prices they come out ahead.</li>` : null}</ul></div>`; })}`;
