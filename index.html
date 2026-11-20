@@ -351,6 +351,8 @@ i.s0{background:var(--sa)} i.s1{background:var(--sb)} i.mk{opacity:.55}
 .mix .mQB{background:var(--qb)} .mix .mRB{background:var(--rb)} .mix .mWR{background:var(--wr)} .mix .mTE{background:var(--te)} .mix .mPK{background:var(--pk)}
 .lchg{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;font-family:var(--f-mono);font-size:12px}
 .tsel{width:100%}
+.fasub{display:block;color:var(--muted);font-size:11px;font-family:var(--f-body);margin-top:2px}
+.tfsides li.nil{color:var(--muted);font-weight:500}
 @media (max-width:520px){.kv3{grid-template-columns:1fr 1fr}.lgb{grid-template-columns:minmax(0,7em) minmax(0,1fr) 36px}}
 </style>
 
@@ -1276,9 +1278,11 @@ function lineup(rows, c, val){ const s = rows.filter(r=>r.pos!=='PK').slice().so
 function leagueTeams(L, M, idx, now){
   const byK = Object.fromEntries(M.rows.map(r=>[r.k, r])), users = Object.fromEntries((L.users||[]).map(u=>[u.user_id, u]));
   const teams = (L.rosters||[]).map(ro=>{ const u = users[ro.owner_id]||{}, ids = [...new Set([...(ro.players||[]), ...(ro.taxi||[]), ...(ro.reserve||[])])];
-    const rows = ids.map(id=>byK[idx[id]]).filter(Boolean), st = ro.settings||{};
+    const rows = ids.map(id=>byK[idx[id]]).filter(Boolean), st = ro.settings||{}, ks = a => new Set((a||[]).map(id=>idx[id]).filter(Boolean));
+    const held = new Set([...(ro.taxi||[]), ...(ro.reserve||[])]), occ = (ro.players||[]).filter(id=>!held.has(id)).length;
     return {rid:ro.roster_id, owner:ro.owner_id, name:(u.metadata&&u.metadata.team_name) || u.display_name || ('Team '+ro.roster_id), user:u.display_name||'',
-      rows, unk:ids.length-rows.length, w:st.wins||0, l:st.losses||0, t:st.ties||0, pf:(st.fpts||0)+(st.fpts_decimal||0)/100, picks:[]}; });
+      rows, unk:ids.length-rows.length, w:st.wins||0, l:st.losses||0, t:st.ties||0, pf:(st.fpts||0)+(st.fpts_decimal||0)/100, picks:[],
+      taxi:ks(ro.taxi), ir:ks(ro.reserve), occ, size:(L.league.roster_positions||[]).filter(x=>x!=='IR').length}; });
   const P = M.picks||[]; if(!P.length || !teams.length) return teams;
   const Y = nextDraftYear(now), R = Math.min(PICK_ROUNDS, (L.league.settings&&L.league.settings.draft_rounds)||PICK_ROUNDS), byR = Object.fromEntries(teams.map(t=>[t.rid, t]));
   const played = teams.some(t=>t.w+t.l>0), order = played ? teams.slice().sort((a,b)=>(a.w-b.w) || (a.pf-b.pf)).map(t=>t.rid) : [];
@@ -1393,6 +1397,42 @@ function LeagueView({teams, me, M, cfg, mv, onOpen, onStar}){
       ${mine.t.picks.map(p=>html`<tr key=${p.k}><td class="nm"><span class="pos PK">PK</span> ${p.n}</td><td>–</td><td>–</td><td>${fmtV(p.v)}</td></tr>`)}</tbody></table></div></div>` : null}`;
 }
 
+// ---- Waivers: board players on no roster in the league, and add/drop moves for your team. A move is suggested when the free
+// agent would start for you, or is worth clearly more on the board than your weakest bench player (taxi and IR never dropped).
+function Waivers({teams, me, M, cfg, mv, onOpen}){
+  const [pos, setPos] = useState('ALL');
+  const T = teams[me]; if(!T) return null;
+  const owned = new Set(teams.flatMap(t=>t.rows.map(r=>r.k))), V = r => r.v;
+  const fa = M.rows.filter(r=>!owned.has(r.k) && r.v>0.5 && !r.fa).sort((a,b)=>b.v-a.v);
+  const base = lineup(T.rows, cfg, V), open = Math.max(0, T.size - T.occ);
+  const drops = T.rows.filter(r=>!base.used.has(r) && !T.taxi.has(r.k) && !T.ir.has(r.k)).sort((a,b)=>a.v-b.v);
+  // keep a backup at every position (starting slots + 1; superflex counts as a QB slot) for byes and injuries
+  const need = {QB:cfg.qb+cfg.sf+1, RB:cfg.rb+1, WR:cfg.wr+1, TE:cfg.te+1}, cnt = {QB:0,RB:0,WR:0,TE:0};
+  T.rows.filter(r=>!T.taxi.has(r.k) && !T.ir.has(r.k)).forEach(r=>cnt[r.pos]++);
+  const moves = [], used = new Set(); let oi = open;
+  for(const r of fa.slice(0, 60)){ if(moves.length>=8) break;
+    const st = lineup([...T.rows, r], cfg, V), gain = st.tot - base.tot, starts = st.used.has(r);
+    if(oi>0){ if(starts || r.v>=3){ moves.push({add:r, drop:null, gain, starts}); oi--; cnt[r.pos]++; } continue; }
+    const d = drops.find(x=>!used.has(x) && (x.pos===r.pos || cnt[x.pos]-1 >= need[x.pos])); if(!d) continue;
+    const st2 = lineup([...T.rows.filter(x=>x!==d), r], cfg, V), g2 = st2.tot - base.tot;
+    if(st2.used.has(r) && g2 > 0.5 || r.v > d.v*1.25 + 2){ moves.push({add:r, drop:d, gain:g2, starts:st2.used.has(r)}); used.add(d); cnt[d.pos]--; cnt[r.pos]++; } }
+  const line = r => { const l = r.lines && r.lines[0], pr = mv && mv.rank(r);
+    return [r.team||'FA', r.ageNow ? 'age '+fmt(r.ageNow,1) : null, l && l.g ? fmt(l.ppg,1)+' PPG' : 'no games yet', pr ? mv.label+' '+r.pos+pr : null, r.d30!=null && Math.abs(r.d30)>=1 ? (r.d30>0?'▲ ':'▼ ')+fmt(Math.abs(r.d30))+' in 30 days' : null, r.inj||null].filter(Boolean).join(' · '); };
+  const list = fa.filter(r=>pos==='ALL' || r.pos===pos).slice(0, 25);
+  return html`<div class="panel"><h2>Waivers</h2><p class="sub">Players on no roster in ${T.name}'s league, valued on this board in your league's format. ${open ? `You have ${open} open roster spot${open>1?'s':''}.` : 'Your roster is full, so each add comes with a drop: your lowest-valued bench player, never taxi or IR, and never your last backup at a position.'}</p></div>
+    ${moves.length ? moves.map((x,i)=>html`<div class="panel tf" key=${i}>
+        <div class="tfsides"><div><span class="lbl">Add</span><ul><li><button class="lnk nmb" onClick=${()=>onOpen(x.add)}><${PosTag} p=${x.add.pos}/> ${x.add.n}</button><span class="mono">${fmtV(x.add.v)}</span></li></ul></div>
+          <div><span class="lbl">${x.drop ? 'Drop' : 'Open spot'}</span><ul>${x.drop ? html`<li><button class="lnk nmb" onClick=${()=>onOpen(x.drop)}><${PosTag} p=${x.drop.pos}/> ${x.drop.n}</button><span class="mono">${fmtV(x.drop.v)}</span></li>` : html`<li class="nil">Nobody</li>`}</ul></div></div>
+        <ul class="why"><li>${x.add.n}: ${line(x.add)}.</li>
+          <li>${x.starts && x.gain>0.5 ? `He'd start for you: your lineup gets ${fmt(x.gain)} better.` : x.drop ? `A bench upgrade: worth ${fmt(x.add.v - x.drop.v)} more on the board than ${x.drop.n}.` : 'A stash worth holding in an open spot.'}</li></ul></div>`)
+      : html`<div class="panel empty"><b>No clear pickups</b><span>Nobody available beats your weakest bench player by enough to be worth the move.</span></div>`}
+    <div class="panel"><h2>Best available</h2>
+      <div class="subtabs" style=${{justifyContent:'flex-start',margin:'8px 0'}}><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${[['ALL','All'],['QB','QB'],['RB','RB'],['WR','WR'],['TE','TE']]}/></div>
+      <div class="tblwrap"><table><thead><tr><th>Player</th><th>Board</th><th>${mv.label}</th><th>Value</th></tr></thead><tbody>
+        ${list.map(r=>html`<tr key=${r.k} class="clk" onClick=${()=>onOpen(r)}><td class="nm"><${PosTag} p=${r.pos}/> ${r.n}<small class="fasub">${line(r)}</small></td><td>${r.pos}${r.prank}</td><td>${mv.rank(r) ? r.pos+mv.rank(r) : '–'}</td><td>${fmtV(r.v)}</td></tr>`)}
+      </tbody></table></div>
+      ${!list.length ? html`<p class="note">Nobody on the board is available at this position.</p>` : null}</div>`;
+}
 function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
   const [res, setRes] = useState(null);
   const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+mv.src+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v);
@@ -1434,8 +1474,9 @@ function Trade({M, cfg, setCfg, players, slmap, fc, hasFd, onOpen, onStar}){
   const view = !connected && tab!=='calc' ? 'calc' : tab;
   const loadTrade = (give, get, ti) => { setSides([give, get]); setSideT([teams[me].rid, teams[ti].rid]); go('calc'); window.scrollTo(0,0); };
   return html`<${SleeperPanel} S=${S} M=${M} cfg=${cfg} setCfg=${setCfg} hasFd=${hasFd} teams=${teams} me=${me} setMe=${setMe}/>
-    ${connected ? html`<div class="subtabs"><${Seg} label="Trade tools" value=${view} onChange=${go} opts=${[['find','Trade finder'],['calc','Calculator'],['league','League']]}/></div>` : null}
+    ${connected ? html`<div class="subtabs"><${Seg} label="Trade tools" value=${view} onChange=${go} opts=${[['find','Trades'],['fa','Waivers'],['calc','Calculator'],['league','League']]}/></div>` : null}
     ${view==='find' ? html`<${Finder} teams=${teams} me=${me} M=${M} cfg=${cfg} setCfg=${setCfg} mv=${mv} onLoad=${loadTrade}/>`
+      : view==='fa' ? html`<${Waivers} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} onOpen=${onOpen}/>`
       : view==='league' ? html`<${LeagueView} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} onOpen=${onOpen} onStar=${onStar}/>`
       : html`<${Calc} M=${M} sides=${sides} setSides=${setSides} sideT=${sideT} setSideT=${setSideT} teams=${teams} me=${me} mv=${mv} onOpen=${onOpen}/>`}`;
 }
