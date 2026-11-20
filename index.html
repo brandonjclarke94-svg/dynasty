@@ -1286,6 +1286,13 @@ function findTrades(teams, me, c, mv){
   const pool = t => [...t.rows, ...t.picks].filter(r=>r.v>=2).sort((a,b)=>b.v-a.v).slice(0, 22);
   const combos = A => { const o = A.map(x=>[x]); for(let i=0;i<A.length;i++) for(let j=i+1;j<A.length;j++) o.push([A[i], A[j]]); return o; };
   const T = teams[me], myBase = lineup(T.rows, c, V), A = combos(pool(T)), out = [];
+  // positional fit: each team's starters at each position, ranked across the league (you on the board, them at market prices).
+  // A team only takes on a position it isn't sending back if it isn't already loaded there (top third) and the new player starts.
+  const nT = teams.length, top = Math.ceil(nT/3), pr = val => { const L = teams.map(t=>lineup(t.rows, c, val).by), R = teams.map(()=>({}));
+    POS.forEach(q=>teams.map((_,i)=>i).sort((a,b)=>L[b][q]-L[a][q]).forEach((i,j)=>R[i][q]=j+1)); return R; };
+  const rkMe = pr(V)[me], rkMk = pr(mv);
+  const fits = (recv, sent, rk, after) => { const sq = new Set(sent.filter(r=>r.pos!=='PK').map(r=>r.pos));
+    return recv.every(r=>r.pos==='PK' || sq.has(r.pos) || (rk[r.pos] > top && after.used.has(r))); };
   teams.forEach((t, ti)=>{ if(ti===me) return; const theirBase = lineup(t.rows, c, mv), B = combos(pool(t));
     for(const give of A) for(const get of B){ if(give.length + get.length > 3) continue;
       const gB = E(give, V), rB = E(get, V), pkg = Math.max(gB, rB), myGain = rB - gB; if(myGain < -0.06*pkg) continue;
@@ -1294,8 +1301,9 @@ function findTrades(teams, me, c, mv){
       const mine2 = lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, V), their2 = lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, mv);
       const myLine = mine2.tot - myBase.tot, theirLine = their2.tot - theirBase.tot;
       if(theirMk + 0.5*theirLine < -0.03*pkg) continue;
+      if(!fits(get, give, rkMe, mine2) || !fits(give, get, rkMk[ti], their2)) continue;
       const score = myGain + lam*myLine; if(score < 0.04*pkg || myGain + myLine <= 0) continue;
-      out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by]}); } });
+      out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by], rkMe, rkThem:rkMk[ti], nT}); } });
   out.sort((a,b)=>b.score-a.score);
   const per = {}, gotK = {}, gaveK = {}, pick = [];
   for(const x of out){ if(pick.length>=12) break; if((per[x.ti]||0)>=2) continue;
@@ -1378,7 +1386,7 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
   useEffect(()=>{ setRes(null); const t = setTimeout(()=>{ try{ setRes({key, list:findTrades(teams, me, M.cfg, mv)}); }catch(e){ console.error(e); setRes({key, list:[]}); } }, 30); return ()=>clearTimeout(t); }, [key]);
   const T = teams[me];
   return html`<div class="panel"><h2>Trade finder</h2>
-      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at expert-consensus prices. That gap, where the board likes a player more than the market, is where the edge is.</p>
+      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at expert-consensus prices. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start.</p>
       <div class="fld" style=${{marginTop:12}}><label>Your team's direction<span class="hint">Win now weighs your starting lineup more; rebuild weighs long-term value and picks.</span></label>
         <${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/></div></div>
     ${!res || res.key!==key ? html`<div class="panel empty"><b>Looking through ${teams.length-1} rosters</b><span>Checking a few thousand packages.</span></div>`
@@ -1390,8 +1398,8 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
           <div class="tfsides"><div><span class="lbl">You send</span><ul>${x.give.map(li)}</ul></div><div><span class="lbl">You get</span><ul>${x.get.map(li)}</ul></div></div>
           <div class="tfstats"><div><span>Your value</span><b class=${'mono '+(x.myGain>=0?'up':'dn')}>${x.myGain>=0?'+':''}${fmt(x.myGain)}</b></div><div><span>Your starters</span><b class=${'mono '+(x.myLine>=0.5?'up':x.myLine<=-0.5?'dn':'')}>${x.myLine>=0?'+':''}${fmt(x.myLine)}</b></div><div><span>Market says</span><b class="mono">${Math.abs(x.theirMk)<0.04*Math.max(x.gM,x.rM)?'Even':x.theirMk>0?'Them +'+fmt(100*x.theirMk/Math.max(1,x.rM),0)+'%':'You +'+fmt(-100*x.theirMk/Math.max(1,x.gM),0)+'%'}</b></div></div>
           <ul class="why">${why.map(w=>html`<li key=${w}>${w}</li>`)}
-            ${x.myLine>=0.5 && pg[1]>0.5 ? html`<li>Your starting ${pg[0]} spot gets ${fmt(pg[1])} better.</li>` : null}
-            ${tg[1]>0.5 ? html`<li>Why they'd say yes: it upgrades their starting ${tg[0]}${x.theirMk>0?' and they win the trade at market prices':''}.</li>` : x.theirMk>0 ? html`<li>Why they'd say yes: at consensus prices they come out ahead.</li>` : null}</ul></div>`; })}`;
+            ${x.myLine>=0.5 && pg[1]>0.5 ? html`<li>${x.rkMe[pg[0]] > Math.ceil(x.nT/3) ? 'Fills a need' : 'Upgrades a strength'}: your ${pg[0]} starters rank ${ordn(x.rkMe[pg[0]])} of ${x.nT}, and this adds ${fmt(pg[1])}.</li>` : null}
+            ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>0?', and they win the trade at market prices':''}.</li>` : x.theirMk>0 ? html`<li>Why they'd say yes: at consensus prices they come out ahead.</li>` : null}</ul></div>`; })}`;
 }
 
 function Trade({M, cfg, setCfg, players, slmap, hasFd, onOpen, onStar}){
