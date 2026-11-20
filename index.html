@@ -354,6 +354,31 @@ i.s0{background:var(--sa)} i.s1{background:var(--sb)} i.mk{opacity:.55}
 .fasub{display:block;color:var(--muted);font-size:11px;font-family:var(--f-body);margin-top:2px}
 .tfsides li.nil{color:var(--muted);font-weight:500}
 @media (max-width:520px){.kv3{grid-template-columns:1fr 1fr}.lgb{grid-template-columns:minmax(0,7em) minmax(0,1fr) 36px}}
+
+/* UI/UX pass (Nov 20 2026, ui-ux-pro-max checklist): 44px touch targets on touch screens, 12px floor for informative text,
+   readable team tags, 5-item bottom bar on phones. Desktop (mouse) keeps the dense layout. */
+.eyebrow{font-size:11.5px}
+.pos,.tm,.ecr,.tag,.chip,.lb{font-size:12px}
+.ce .cm,.ce .pp,.yb span,.tm.sm{font-size:11px}
+nav.tabs .wrap{grid-template-columns:repeat(5,1fr)}
+nav.tabs button{font-size:11.5px;min-height:52px;align-content:center}
+nav.tabs button:active{background:var(--hover)}
+.btn,.seg button,.lgbtn,.sugg button{transition:background .15s var(--ease),color .15s,border-color .15s}
+.btn:focus-visible,.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.moreseg{display:flex;justify-content:center}
+.tier{font-size:12px}
+.toolbar{grid-template-columns:minmax(0,1fr)}
+.toolbar .controls{min-width:0}
+@media (max-width:640px){.seg{flex-wrap:nowrap;overflow-x:auto;max-width:100%;min-width:0;scrollbar-width:none;-webkit-overflow-scrolling:touch}.seg::-webkit-scrollbar{display:none}.seg button{flex:0 0 auto;white-space:nowrap}}
+@media (min-width:900px){.moreseg{display:none}}
+@media (pointer:coarse){
+  .btn,.search,select.sel,.lgbtn{min-height:44px}
+  .seg button{min-height:44px;min-width:44px;padding:8px 12px}
+  .seg{padding:2px}
+  .sugg button{min-height:44px;align-items:center}
+  .pick button{min-width:36px;min-height:36px}
+  button.lnk{min-height:32px}
+}
 </style>
 
 <div id="root"></div>
@@ -789,7 +814,8 @@ function Seg({value, opts, onChange, label}){
 const TEAMC = {ARI:['#97233F','#000000'], ATL:['#A71930','#000000'], BAL:['#241773','#9E7C0C'], BUF:['#00338D','#C60C30'], CAR:['#0085CA','#000000'], CHI:['#0B162A','#E64100'], CIN:['#FB4F14','#000000'], CLE:['#FF3C00','#311D00'], DAL:['#002244','#B0B7BC'], DEN:['#002244','#FB4F14'], DET:['#0076B6','#B0B7BC'], GB:['#203731','#FFB612'], HOU:['#03202F','#A71930'], IND:['#002C5F','#a5acaf'], JAX:['#006778','#000000'], KC:['#E31837','#FFB612'], LA:['#003594','#FFD100'], LAC:['#007BC7','#ffc20e'], LV:['#000000','#A5ACAF'], MIA:['#008E97','#F58220'], MIN:['#4F2683','#FFC62F'], NE:['#002244','#C60C30'], NO:['#D3BC8D','#000000'], NYG:['#0B2265','#A71930'], NYJ:['#003F2D','#000000'], PHI:['#004C54','#A5ACAF'], PIT:['#000000','#FFB612'], SEA:['#002244','#69be28'], SF:['#AA0000','#B3995D'], TB:['#A71930','#322F2B'], TEN:['#4495D2','#D50A0A'], WAS:['#5A1414','#FFB612']};   // team colours (nflverse), for badges
 function lum(h){ const n=parseInt(h.slice(1),16), c=[n>>16&255,n>>8&255,n&255].map(v=>{ v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); }); return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]; }
 function TeamTag({t}){ const c = TEAMC[t]; if(!c) return html`<span class="tm fa">${t||'FA'}</span>`;
-  return html`<span class="tm" style=${{background:c[0], color: lum(c[0])>0.4 ? '#111' : '#fff', boxShadow:'inset 0 -2px 0 '+c[1]}}>${t}</span>`; }
+  const L = lum(c[0]), cw = 1.05/(L+0.05), cb = (L+0.05)/(lum('#111111')+0.05);   // whichever text colour reads better on the team colour
+  return html`<span class="tm" style=${{background:c[0], color: cb>cw ? '#111' : '#fff', boxShadow:'inset 0 -2px 0 '+c[1]}}>${t}</span>`; }
 function PosTag({p, n}){ return html`<span class=${'pos '+p}>${p}${n!=null ? n : ''}</span>`; }
 
 function Row({r, top, onOpen, posView, mv, eg, star}){
@@ -1881,6 +1907,7 @@ function App(){
       <nav class="dtabs" aria-label="Sections">${TABS.map(([v,l])=>html`<button key=${v} aria-current=${view===v?'page':null} onClick=${()=>go(v)}>${l}</button>`)}</nav>
       ${st}</div></header>
     <main class="wrap">
+      ${loaded && (view==='format'||view==='method') ? html`<div class="moreseg"><${Seg} label="More" value=${view} onChange=${go} opts=${[['format','Format'],['method','Method']]}/></div>` : null}
       ${!loaded ? html`<div class="panel empty"><b>Loading the board</b><span>Fetching the latest values.</span></div>`
         : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
         : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine}/>`
@@ -1889,7 +1916,8 @@ function App(){
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
         : html`<${Method} M=${M} meta=${D.meta} players=${players} cfg=${cfg} D=${D} onOpen=${r=>setOpen(r.k)}/>`}
     </main>
-    <nav class="tabs" aria-label="Sections"><div class="wrap">${TABS.map(([v,l,ic])=>html`<button key=${v} aria-current=${view===v?'page':null} onClick=${()=>go(v)}>${ic}<span>${l}</span></button>`)}</div></nav>
+    <nav class="tabs" aria-label="Sections"><div class="wrap">${[...TABS.slice(0,4), ['more','More', ico(html`<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>`)]].map(([v,l,ic])=>{ const cur = v==='more' ? (view==='format'||view==='method') : view===v;
+      return html`<button key=${v} aria-current=${cur?'page':null} onClick=${()=>go(v==='more' ? (view==='method'?'method':'format') : v)}>${ic}<span>${l}</span></button>`; })}</div></nav>
     ${openRow ? html`<${Sheet} r=${openRow} M=${M} canEdit=${canEdit} onAdj=${saveAdj} onInj=${saveInj} onOut=${saveOut} starred=${mine.has(openRow.k)} onStar=${toggleMine} H=${hist && hist.key===histKey ? hist.H : null} onClose=${()=>setOpen(null)}/>` : null}`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
