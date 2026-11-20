@@ -286,6 +286,72 @@ td{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink2)
 .ce .cm .tm{font-size:9.5px;padding:0 4px} .ce .cm .pp{color:var(--muted)}
 .ce .up{color:var(--good)} .ce .dn{color:var(--bad)} .ce .mu{color:var(--muted)}
 .lg{font-weight:700;padding:0 4px;border-radius:4px} .lg.buy{background:var(--good-bg);color:var(--good)} .lg.sell{background:var(--bad-bg);color:var(--bad)}
+/* Sleeper league + trade tools */
+:root{--sa:#5B8CFF;--sb:#C792EA}
+.slphead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.slpbtns{display:flex;gap:8px;flex-wrap:wrap}
+.slpform{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.slpform .search{flex:1 1 180px}
+.lglist{display:grid;gap:8px;margin-top:12px}
+.lgbtn{display:grid;gap:2px;text-align:left;border:1px solid var(--line2);background:var(--raised);border-radius:10px;padding:10px 12px}
+.lgbtn:hover{background:var(--hover)} .lgbtn span{color:var(--muted);font-size:12.5px}
+.lnk{border:0;background:none;padding:0;color:var(--accent);font-weight:600;text-align:left}
+.warnt{color:var(--warn);margin-top:8px}
+.subtabs{display:flex;justify-content:center}
+.posrk{display:grid;gap:8px;margin:12px 0}
+.prk{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:10px;align-items:center}
+.prk b{text-align:right;font-size:13px}
+.pbar,.bar{height:10px;border-radius:5px;background:var(--bg2);border:1px solid var(--line);overflow:hidden;position:relative;min-width:0}
+.pbar i{position:absolute;inset:0 auto 0 0;background:var(--ink2);border-radius:5px}
+.pbar i.hi{background:var(--good)} .pbar i.lo{background:var(--bad)}
+.kv3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0}
+.kv3 div{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.kv3 span{display:block;font-size:11px;color:var(--muted)} .kv3 b{font-size:15px}
+.lgbars{display:grid;gap:7px;margin-top:10px}
+.lgb{display:grid;grid-template-columns:minmax(0,9em) minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px}
+.lgb .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink2)}
+.lgb b{text-align:right;font-size:12px}
+.lgb .bar i{position:absolute;inset:0 auto 0 0;border-radius:5px}
+.lgb .bar i.all{background:var(--line2)} .lgb .bar i.st{background:var(--muted)}
+.lgb.me .nm{color:var(--ink);font-weight:700} .lgb.me .bar i.all{background:var(--accent-soft)} .lgb.me .bar i.st{background:var(--accent)}
+.tblwrap{overflow-x:auto;margin-top:8px}
+tr.clk{cursor:pointer} tr.clk:hover td{background:var(--hover)}
+.tf{display:grid;gap:10px}
+.tfhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.tfsides{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tfsides .lbl{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tfsides ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px}
+.tfsides li{display:flex;align-items:center;gap:6px;background:var(--raised);border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-weight:600;min-width:0}
+.tfsides li .mono{margin-left:auto;color:var(--ink2);font-weight:500}
+.tfstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tfstats div{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+.tfstats span{display:block;font-size:11px;color:var(--muted)} .tfstats b{font-size:15px}
+.why{margin:0;padding-left:18px;color:var(--ink2);font-size:13px;display:grid;gap:4px}
+.sideword{font-family:var(--f-mono);font-size:11px;color:var(--muted);letter-spacing:0}
+.side.s0{border-top:3px solid var(--sa)} .side.s1{border-top:3px solid var(--sb)}
+.pk2{align-items:flex-start}
+.pk2 small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px;line-height:1.35}
+.pick .nmb{color:var(--ink);font-weight:600;display:inline-flex;align-items:center;gap:6px;font-size:14px;padding:0;text-align:left}
+.tgrid2{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media (min-width:760px){.tgrid2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ybars{display:flex;gap:6px;height:130px;align-items:flex-end;margin:12px 0 6px}
+.yb{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;min-width:0}
+.yp{flex:1;width:100%;display:flex;gap:2px;align-items:flex-end;justify-content:center}
+.yp i{display:block;width:45%;border-radius:3px 3px 0 0;min-height:1px}
+.yb span{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+i.s0{background:var(--sa)} i.s1{background:var(--sb)} i.mk{opacity:.55}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.bvm{margin-top:12px;font-size:13px}
+.bvr{display:grid;grid-template-columns:52px minmax(0,1fr) 44px;gap:8px;align-items:center;margin-top:6px;font-size:12px;color:var(--muted)}
+.bvr .mono{text-align:right;color:var(--ink2)}
+.bvr .bar i{position:absolute;inset:0 auto 0 0;border-radius:5px}
+.mix{display:flex;height:22px;border-radius:6px;overflow:hidden;margin-top:6px;border:1px solid var(--line)}
+.mix i{display:flex;align-items:center;justify-content:center;font-style:normal;font-family:var(--f-mono);font-size:10.5px;font-weight:700;color:#0A0C0F}
+.mix .mQB{background:var(--qb)} .mix .mRB{background:var(--rb)} .mix .mWR{background:var(--wr)} .mix .mTE{background:var(--te)} .mix .mPK{background:var(--pk)}
+.lchg{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;font-family:var(--f-mono);font-size:12px}
+.tsel{width:100%}
+@media (max-width:520px){.kv3{grid-template-columns:1fr 1fr}.lgb{grid-template-columns:minmax(0,7em) minmax(0,1fr) 36px}}
 </style>
 
 <div id="root"></div>
@@ -1088,6 +1154,7 @@ function ValueHistory({r, H}){
     </svg>
     <p class="note" style=${{margin:'4px 0 0'}}>Tap a point. Each point is the board rebuilt from the games played by then; injury news, outlook notes and team changes only count from today.</p></div>`;
 }
+
 function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}){
   const [adj, setAdj] = useState(r.adj||0);
   useEffect(()=>{ const f = e=>{ if(e.key==='Escape') onClose(); }; window.addEventListener('keydown', f); return ()=>window.removeEventListener('keydown', f); }, []);
@@ -1169,30 +1236,259 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
    </div></div>`;
 }
 
-function Trade({M}){
+// ---- Sleeper: connect a league (public API, no sign-in). Its roster, scoring and teams drive the format and the trade finder.
+const SLP = 'https://api.sleeper.app/v1/', SITE_URL = 'https://brandonjclarke94-svg.github.io/dynasty/';
+async function slp(path){ let r; try{ r = await fetch(SLP+path); }catch(e){ const x = new Error('blocked'); x.code = 'blocked'; throw x; }
+  if(!r.ok){ const x = new Error('Sleeper '+r.status); x.code = r.status===404 ? 'notfound' : 'http'; throw x; } return r.json(); }
+// the league's lineup and scoring, in the board's format settings
+function leagueCfg(lg, hasFd){ const rp = lg.roster_positions||[], cnt = t => rp.filter(x=>x===t).length, sc = lg.scoring_settings||{}, nz = (x, d) => x==null ? d : x;
+  const c = {teams:Math.max(4, Math.min(32, lg.total_rosters||12)), qb:cnt('QB'), rb:cnt('RB'), wr:cnt('WR'), te:cnt('TE'), flex:cnt('FLEX')+cnt('WRRB_FLEX')+cnt('REC_FLEX'), sf:cnt('SUPER_FLEX'),
+    ppr:nz(sc.rec, 1), tep:nz(sc.bonus_rec_te, 0), ptd:nz(sc.pass_td, 4), pyd:sc.pass_yd ? Math.round(1/sc.pass_yd) : 25, int:nz(sc.pass_int, -1), fl:nz(sc.fum_lost, -2),
+    league:(lg.settings && lg.settings.type===0) ? 'redraft' : 'dynasty'};
+  if(hasFd) c.fd = ((sc.rec_fd||0) + (sc.rush_fd||0))/2;
+  return c; }
+const lgSummary = lg => { const c = leagueCfg(lg, false); return `${c.teams} teams · ${c.qb>=2?'2QB':c.sf?'Superflex':'1QB'} · ${c.ppr===1?'PPR':c.ppr===0.5?'Half PPR':c.ppr?c.ppr+' PPR':'Standard'}${c.tep?' · TE+'+c.tep:''} · ${c.league==='redraft'?'Redraft':(lg.settings&&lg.settings.type===1)?'Keeper':'Dynasty'}`; };
+// Sleeper player id -> board key: the builder stores each player's Sleeper id; the separate map covers boards built before that
+function slIndex(players, slmap){ const m = {...((slmap&&slmap.m)||{})}; players.forEach(p=>{ if(p.sl) m[p.sl] = p.k; }); return m; }
+// what the market pays: the board value at the player's expert-consensus rank (other managers trade on consensus)
+function marketFn(M){ const lad = {}, nE = {}; POS.forEach(q=>{ const P = M.rows.filter(r=>r.pos===q); lad[q] = P.map(r=>r.v).sort((a,b)=>b-a); nE[q] = P.filter(r=>r.ecrPos).length; });
+  return r => { if(!r || r.pos==='PK') return r ? r.v : 0; const L = lad[r.pos]; if(!L || !L.length) return r.v;
+    return r.ecrPos ? L[Math.min(L.length, r.ecrPos)-1] : Math.min(r.v, L[Math.min(L.length-1, nE[r.pos])]||0); }; }
+// best starting lineup (dedicated slots first, then flex, then superflex), by a value function
+function lineup(rows, c, val){ const s = rows.filter(r=>r.pos!=='PK').slice().sort((a,b)=>val(b)-val(a)), used = new Set(), by = {QB:0,RB:0,WR:0,TE:0}; let tot = 0;
+  const take = (ok, n) => { for(let i=0; i<s.length && n>0; i++){ const r = s[i]; if(used.has(r) || !ok(r.pos)) continue; used.add(r); n--; const v = val(r); tot += v; by[r.pos] += v; } };
+  take(p=>p==='QB', c.qb); take(p=>p==='RB', c.rb); take(p=>p==='WR', c.wr); take(p=>p==='TE', c.te); take(p=>p!=='QB', c.flex); take(()=>true, c.sf);
+  return {tot, by, used}; }
+// teams of a loaded league: rosters on this board's values, plus draft picks (own picks unless traded; next year's slot guessed from the standings)
+function leagueTeams(L, M, idx, now){
+  const byK = Object.fromEntries(M.rows.map(r=>[r.k, r])), users = Object.fromEntries((L.users||[]).map(u=>[u.user_id, u]));
+  const teams = (L.rosters||[]).map(ro=>{ const u = users[ro.owner_id]||{}, ids = [...new Set([...(ro.players||[]), ...(ro.taxi||[]), ...(ro.reserve||[])])];
+    const rows = ids.map(id=>byK[idx[id]]).filter(Boolean), st = ro.settings||{};
+    return {rid:ro.roster_id, owner:ro.owner_id, name:(u.metadata&&u.metadata.team_name) || u.display_name || ('Team '+ro.roster_id), user:u.display_name||'',
+      rows, unk:ids.length-rows.length, w:st.wins||0, l:st.losses||0, t:st.ties||0, pf:(st.fpts||0)+(st.fpts_decimal||0)/100, picks:[]}; });
+  const P = M.picks||[]; if(!P.length || !teams.length) return teams;
+  const Y = nextDraftYear(now), R = Math.min(PICK_ROUNDS, (L.league.settings&&L.league.settings.draft_rounds)||PICK_ROUNDS), byR = Object.fromEntries(teams.map(t=>[t.rid, t]));
+  const played = teams.some(t=>t.w+t.l>0), order = played ? teams.slice().sort((a,b)=>(a.w-b.w) || (a.pf-b.pf)).map(t=>t.rid) : [];
+  const own = {}; for(let y=Y; y<Y+3; y++) for(let r=1; r<=R; r++) teams.forEach(t=>own[`${y}-${r}-${t.rid}`] = t.rid);
+  (L.traded||[]).forEach(t=>{ const k = `${t.season}-${t.round}-${t.roster_id}`; if(k in own) own[k] = t.owner_id; });
+  const pv = Object.fromEntries(P.map(p=>[p.k, p])), pad = x => String(x).padStart(2,'0'), ord = ['1st','2nd','3rd','4th'];
+  Object.entries(own).forEach(([k, holder])=>{ const [y, r, orig] = k.split('-').map(Number), slot = y===Y && order.length ? order.indexOf(orig)+1 : 0;
+    const base = slot && pv[`pk${y}-${r}.${pad(slot)}`] ? pv[`pk${y}-${r}.${pad(slot)}`] : pv[`pk${y}-${r}`]; if(!base || !byR[holder]) return;
+    const from = orig!==holder && byR[orig] ? byR[orig].name : null;
+    byR[holder].picks.push({...base, k:`${base.k}@${orig}`, n:`${y} ${ord[r-1]}${slot ? ` (${r}.${pad(slot)} by record)` : ''}${from ? ' from '+from : ''}`, orig}); });
+  teams.forEach(t=>t.picks.sort((a,b)=>b.v-a.v));
+  return teams; }
+// trade finder: packages that raise your value on this board and/or your starting lineup, which the other manager should
+// see as fair or better at consensus (market) prices, and that don't gut his lineup by his own (market) read
+function findTrades(teams, me, c, mv){
+  const star = c.star, lam = ({win:1, neutral:0.5, rebuild:0.15})[c.mode] ?? 0.5, V = r => r.v;
+  const E = (xs, f) => Math.pow(xs.reduce((a,r)=>a+tradeVal(f(r), star), 0), 1/star);
+  const pool = t => [...t.rows, ...t.picks].filter(r=>r.v>=2).sort((a,b)=>b.v-a.v).slice(0, 22);
+  const combos = A => { const o = A.map(x=>[x]); for(let i=0;i<A.length;i++) for(let j=i+1;j<A.length;j++) o.push([A[i], A[j]]); return o; };
+  const T = teams[me], myBase = lineup(T.rows, c, V), A = combos(pool(T)), out = [];
+  teams.forEach((t, ti)=>{ if(ti===me) return; const theirBase = lineup(t.rows, c, mv), B = combos(pool(t));
+    for(const give of A) for(const get of B){ if(give.length + get.length > 3) continue;
+      const gB = E(give, V), rB = E(get, V), pkg = Math.max(gB, rB), myGain = rB - gB; if(myGain < -0.06*pkg) continue;
+      const gM = E(give, mv), rM = E(get, mv), theirMk = gM - rM; if(theirMk < -0.05*Math.max(gM, rM)) continue;
+      const gs = new Set(give), rs = new Set(get);
+      const mine2 = lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, V), their2 = lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, mv);
+      const myLine = mine2.tot - myBase.tot, theirLine = their2.tot - theirBase.tot;
+      if(theirMk + 0.5*theirLine < -0.03*pkg) continue;
+      const score = myGain + lam*myLine; if(score < 0.04*pkg || myGain + myLine <= 0) continue;
+      out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by]}); } });
+  out.sort((a,b)=>b.score-a.score);
+  const per = {}, gotK = {}, gaveK = {}, pick = [];
+  for(const x of out){ if(pick.length>=12) break; if((per[x.ti]||0)>=2) continue;
+    if(x.get.some(r=>gotK[r.k])) continue; if(x.give.some(r=>(gaveK[r.k]||0)>=2)) continue;
+    pick.push(x); per[x.ti] = (per[x.ti]||0)+1; x.get.forEach(r=>gotK[r.k]=1); x.give.forEach(r=>gaveK[r.k]=(gaveK[r.k]||0)+1); }
+  return pick; }
+// one line of why, per player: where the board and the experts disagree
+function whyLine(r, side){ if(r.pos==='PK' || !r.ecrPos || !r.prank) return null;
+  if(side==='get' && r.prank < r.ecrPos*0.8) return `${r.n}: board ${r.pos}${r.prank}, experts ${r.pos}${r.ecrPos}. The market rates him lower than we do.`;
+  if(side==='give' && r.prank > r.ecrPos*1.25) return `${r.n}: experts ${r.pos}${r.ecrPos}, board ${r.pos}${r.prank}. You sell at the market's higher price.`;
+  return null; }
+const ordn = n => n+(['th','st','nd','rd'][(n%100-20)%10]||['th','st','nd','rd'][n%100]||'th');
+
+function useSleeper(){
+  const [conn, setConn] = useState(()=>lsGet('dvb.sleeper', null));   // {u, uid, lid, rid}
+  const [leagues, setLeagues] = useState(null), [L, setL] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
+  const save = c => { setConn(c); lsSet('dvb.sleeper', c); };
+  const loadLeague = async lid => { setBusy(true); setErr(null);
+    try{ const [league, rosters, users, traded] = await Promise.all([slp('league/'+lid), slp('league/'+lid+'/rosters'), slp('league/'+lid+'/users'), slp('league/'+lid+'/traded_picks').catch(()=>[])]);
+      setL({league, rosters, users, traded, at:Date.now()}); return {league, rosters}; }
+    catch(e){ setErr(e.code||'http'); return null; } finally{ setBusy(false); } };
+  const findUser = async (name, season) => { setBusy(true); setErr(null);
+    try{ const u = await slp('user/'+encodeURIComponent(name.trim())); if(!u || !u.user_id){ setErr('nouser'); return; }
+      let ls = await slp(`user/${u.user_id}/leagues/nfl/${season}`); if(!ls || !ls.length) ls = await slp(`user/${u.user_id}/leagues/nfl/${season-1}`);
+      setLeagues(ls||[]); save({u:u.display_name||name.trim(), uid:u.user_id}); }
+    catch(e){ setErr(e.code==='notfound' ? 'nouser' : e.code||'http'); } finally{ setBusy(false); } };
+  useEffect(()=>{ if(conn && conn.lid && !L) loadLeague(conn.lid); }, []);
+  return {conn, save, leagues, setLeagues, L, setL, err, busy, loadLeague, findUser};
+}
+
+function SleeperPanel({S, M, cfg, setCfg, hasFd, teams, me, setMe}){
+  const [name, setName] = useState(S.conn ? S.conn.u : '');
+  const season = M ? M.season : new Date().getFullYear();
+  const pickLeague = async lg => { const r = await S.loadLeague(lg.league_id); if(!r) return;
+    const mine = (r.rosters||[]).find(x=>x.owner_id===S.conn.uid || (x.co_owners||[]).includes(S.conn.uid));
+    S.save({...S.conn, lid:lg.league_id, rid:mine ? mine.roster_id : null, prev:cfg});
+    setCfg({...cfg, ...leagueCfg(r.league, hasFd)}); S.setLeagues(null); };
+  const errTxt = {blocked: html`This view can't reach Sleeper. Open the <a href=${SITE_URL} target="_blank" rel="noopener">board's website</a> to connect your league there.`,
+    nouser:'No Sleeper user by that name. Check the spelling (it is your username, not your team name).', notfound:'Sleeper could not find that league.', http:'Sleeper did not answer. Try again in a minute.'}[S.err];
+  const lg = S.L && S.L.league, T = teams && me>=0 ? teams[me] : null;
+  if(lg) return html`<div class="panel slp"><div class="slphead"><div style=${{minWidth:0}}><span class="eyebrow">Sleeper league</span><h2 style=${{margin:'2px 0'}}>${lg.name}</h2><p class="sub">${lgSummary(lg)}</p></div>
+      <div class="slpbtns"><button class="btn" onClick=${()=>S.loadLeague(lg.league_id)} disabled=${S.busy}>${S.busy?'Loading…':'Refresh'}</button><button class="btn" onClick=${()=>{ S.setL(null); S.save({u:S.conn.u, uid:S.conn.uid}); S.findUser(S.conn.u, season); }}>Change</button></div></div>
+    <div class="fld" style=${{marginTop:10}}><label for="slpteam">Your team</label>
+      <select id="slpteam" class="sel" value=${me} onChange=${e=>setMe(+e.target.value)}>${(teams||[]).map((t,i)=>html`<option key=${t.rid} value=${i}>${t.name}${t.user && t.user!==t.name ? ' ('+t.user+')' : ''} · ${t.w}-${t.l}${t.t?'-'+t.t:''}</option>`)}</select></div>
+    <p class="note" style=${{marginTop:8}}>The board now uses this league's lineup and scoring.${S.conn && S.conn.prev ? html` <button class="lnk" onClick=${()=>{ setCfg(S.conn.prev); S.save({...S.conn, prev:null}); }}>Undo</button>` : null}${T && T.unk ? ` ${T.unk} of your rostered players (kickers, defenses, deep reserves) aren't on the board.` : ''}</p>
+    ${errTxt ? html`<p class="note warnt">${errTxt}</p>` : null}</div>`;
+  return html`<div class="panel slp"><span class="eyebrow">Sleeper</span><h2 style=${{margin:'2px 0 4px'}}>Connect your league</h2>
+    <p class="sub">Enter your Sleeper username. Pick a league and your team: the board switches to that league's lineup and scoring, and the trade finder looks through every roster for deals that help you.</p>
+    <form class="slpform" onSubmit=${e=>{ e.preventDefault(); if(name.trim()) S.findUser(name, season); }}>
+      <input class="search" type="text" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="Sleeper username" aria-label="Sleeper username" value=${name} onInput=${e=>setName(e.target.value)}/>
+      <button class="btn primary" type="submit" disabled=${S.busy || !name.trim()}>${S.busy ? 'Looking…' : 'Find leagues'}</button></form>
+    ${errTxt ? html`<p class="note warnt">${errTxt}</p>` : null}
+    ${S.leagues ? (S.leagues.length ? html`<div class="lglist">${S.leagues.map(l=>html`<button key=${l.league_id} class="lgbtn" onClick=${()=>pickLeague(l)} disabled=${S.busy}><b>${l.name}</b><span>${lgSummary(l)}</span></button>`)}</div>`
+      : html`<p class="note">No NFL leagues for ${S.conn && S.conn.u} this season or last.</p>`) : null}</div>`;
+}
+
+// league picture: every team's starting lineup by position, ranked, with your team marked
+function LeagueView({teams, me, M, cfg, onOpen, onStar}){
+  const V = r => r.v, rows = teams.map((t,i)=>{ const l = lineup(t.rows, cfg, V), all = t.rows.reduce((a,r)=>a+r.v,0) + t.picks.reduce((a,p)=>a+p.v,0);
+    const age = t.rows.length ? l.used.size ? [...l.used].reduce((a,r)=>a+(r.ageNow||0),0)/l.used.size : 0 : 0; return {t, i, l, all, age}; });
+  const rk = {}; ['tot', ...POS].forEach(q=>{ const s = rows.slice().sort((a,b)=>(q==='tot'?b.l.tot-a.l.tot:b.l.by[q]-a.l.by[q])); s.forEach((x,j)=>(rk[x.i]=rk[x.i]||{})[q]=j+1); });
+  const byAll = rows.slice().sort((a,b)=>b.all-a.all), mx = byAll.length ? byAll[0].all : 1, mine = rows[me], n = teams.length;
+  const dir = mine ? (rk[me].tot <= Math.ceil(n/3) ? 'win' : rk[me].tot > n - Math.ceil(n/3) ? 'rebuild' : 'neutral') : null;
+  return html`${mine ? html`<div class="panel"><h2>${mine.t.name}</h2><p class="sub">Starting lineup on this board, ranked against the league (1st = best). Bars show how your starters at each position compare with the best in the league.</p>
+      <div class="posrk">${POS.filter(q=>(q==='QB'?cfg.qb+cfg.sf:q==='TE'?cfg.te:1)>0).map(q=>{ const best = Math.max(...rows.map(x=>x.l.by[q]))||1, r = rk[me][q];
+        return html`<div key=${q} class="prk"><span class=${'pos '+q}>${q}</span><div class="pbar"><i style=${{width:(100*mine.l.by[q]/best)+'%'}} class=${r<=Math.ceil(n/3)?'hi':r>n-Math.ceil(n/3)?'lo':''}></i></div><b class="mono">${ordn(r)}</b></div>`; })}</div>
+      <div class="kv3"><div><span>Starters</span><b class="mono">${ordn(rk[me].tot)} of ${n}</b></div><div><span>All players + picks</span><b class="mono">${ordn(byAll.findIndex(x=>x.i===me)+1)} of ${n}</b></div><div><span>Starters' average age</span><b class="mono">${fmt(mine.age,1)}</b></div></div>
+      <p class="note">${dir==='win' ? 'Your starters are among the league\'s best: Win now fits (set it in the trade finder).' : dir==='rebuild' ? 'Your starters rank in the bottom third: Rebuild may fit better, trading producers for youth and picks.' : 'Middle of the pack: Neutral fits unless you want to push in one direction.'}</p>
+      <div class="controls"><button class="btn" onClick=${()=>onStar(mine.t.rows.map(r=>r.k))}>Star my roster on the board</button></div></div>` : null}
+    <div class="panel"><h2>League value</h2><p class="sub">Every team's players and picks on this board. The darker part of each bar is the starting lineup.</p>
+      <div class="lgbars">${byAll.map(x=>html`<div key=${x.t.rid} class=${'lgb'+(x.i===me?' me':'')}><span class="nm">${x.t.name}</span><div class="bar"><i class="all" style=${{width:(100*x.all/mx)+'%'}}></i><i class="st" style=${{width:(100*x.l.tot/mx)+'%'}}></i></div><b class="mono">${fmtV(x.all)}</b></div>`)}</div></div>
+    ${mine ? html`<div class="panel"><h2>Your roster</h2><div class="tblwrap"><table><thead><tr><th>Player</th><th>Board</th><th>Experts</th><th>Value</th></tr></thead><tbody>
+      ${mine.t.rows.slice().sort((a,b)=>b.v-a.v).map(r=>html`<tr key=${r.k} class="clk" onClick=${()=>onOpen(r)}><td class="nm"><${PosTag} p=${r.pos}/> ${r.n}${mine.l.used.has(r) ? html` <span class="tm fa">START</span>` : null}</td><td>${r.pos}${r.prank}</td><td>${r.ecrPos ? r.pos+r.ecrPos : '–'}</td><td>${fmtV(r.v)}</td></tr>`)}
+      ${mine.t.picks.map(p=>html`<tr key=${p.k}><td class="nm"><span class="pos PK">PK</span> ${p.n}</td><td>–</td><td>–</td><td>${fmtV(p.v)}</td></tr>`)}</tbody></table></div></div>` : null}`;
+}
+
+function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
+  const [res, setRes] = useState(null);
+  const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v);
+  useEffect(()=>{ setRes(null); const t = setTimeout(()=>{ try{ setRes({key, list:findTrades(teams, me, M.cfg, mv)}); }catch(e){ console.error(e); setRes({key, list:[]}); } }, 30); return ()=>clearTimeout(t); }, [key]);
+  const T = teams[me];
+  return html`<div class="panel"><h2>Trade finder</h2>
+      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at expert-consensus prices. That gap, where the board likes a player more than the market, is where the edge is.</p>
+      <div class="fld" style=${{marginTop:12}}><label>Your team's direction<span class="hint">Win now weighs your starting lineup more; rebuild weighs long-term value and picks.</span></label>
+        <${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/></div></div>
+    ${!res || res.key!==key ? html`<div class="panel empty"><b>Looking through ${teams.length-1} rosters</b><span>Checking a few thousand packages.</span></div>`
+      : !res.list.length ? html`<div class="panel empty"><b>No clear wins right now</b><span>Nothing passed both tests: better for you on this board and fair to them at market prices. Try another team direction.</span></div>`
+      : res.list.map((x,i)=>{ const t = teams[x.ti], why = [...x.get.map(r=>whyLine(r,'get')), ...x.give.map(r=>whyLine(r,'give'))].filter(Boolean);
+        const pg = POS.map(q=>[q, x.myBy[1][q]-x.myBy[0][q]]).sort((a,b)=>b[1]-a[1])[0], tg = POS.map(q=>[q, x.theirBy[1][q]-x.theirBy[0][q]]).sort((a,b)=>b[1]-a[1])[0];
+        const li = r => html`<li key=${r.k}>${r.pos==='PK' ? html`<span class="pos PK">PK</span>` : html`<${PosTag} p=${r.pos}/>`} ${r.n}<span class="mono">${fmtV(r.v)}</span></li>`;
+        return html`<div class="panel tf" key=${i}><div class="tfhead"><span class="eyebrow">With ${t.name}</span><button class="btn" onClick=${()=>onLoad(x.give.map(r=>r.k), x.get.map(r=>r.k), x.ti)}>Open in calculator</button></div>
+          <div class="tfsides"><div><span class="lbl">You send</span><ul>${x.give.map(li)}</ul></div><div><span class="lbl">You get</span><ul>${x.get.map(li)}</ul></div></div>
+          <div class="tfstats"><div><span>Your value</span><b class=${'mono '+(x.myGain>=0?'up':'dn')}>${x.myGain>=0?'+':''}${fmt(x.myGain)}</b></div><div><span>Your starters</span><b class=${'mono '+(x.myLine>=0.5?'up':x.myLine<=-0.5?'dn':'')}>${x.myLine>=0?'+':''}${fmt(x.myLine)}</b></div><div><span>Market says</span><b class="mono">${Math.abs(x.theirMk)<0.04*Math.max(x.gM,x.rM)?'Even':x.theirMk>0?'Them +'+fmt(100*x.theirMk/Math.max(1,x.rM),0)+'%':'You +'+fmt(-100*x.theirMk/Math.max(1,x.gM),0)+'%'}</b></div></div>
+          <ul class="why">${why.map(w=>html`<li key=${w}>${w}</li>`)}
+            ${x.myLine>=0.5 && pg[1]>0.5 ? html`<li>Your starting ${pg[0]} spot gets ${fmt(pg[1])} better.</li>` : null}
+            ${tg[1]>0.5 ? html`<li>Why they'd say yes: it upgrades their starting ${tg[0]}${x.theirMk>0?' and they win the trade at market prices':''}.</li>` : x.theirMk>0 ? html`<li>Why they'd say yes: at consensus prices they come out ahead.</li>` : null}</ul></div>`; })}`;
+}
+
+function Trade({M, cfg, setCfg, players, slmap, hasFd, onOpen, onStar}){
+  const S = useSleeper();
+  const idx = useMemo(()=>slIndex(players, slmap), [players, slmap]);
+  const teams = useMemo(()=>S.L && M ? leagueTeams(S.L, M, idx, Date.now()) : null, [S.L, M, idx]);
+  const [meSel, setMeSel] = useState(null);
+  const me = teams ? (meSel!=null && meSel<teams.length ? meSel : Math.max(0, teams.findIndex(t=>S.conn && t.rid===S.conn.rid))) : -1;
+  const setMe = i => { setMeSel(i); if(teams && teams[i]) S.save({...S.conn, rid:teams[i].rid}); };
+  const [tab, setTab] = useState(()=>lsGet('dvb.tradeTab', 'calc'));
+  const go = t => { setTab(t); lsSet('dvb.tradeTab', t); };
   const [sides, setSides] = useState(()=>lsGet('dvb.trade', [[],[]]));
-  const [q, setQ] = useState(['','']);
+  const [sideT, setSideT] = useState(()=>lsGet('dvb.tradeTeams', [null, null]));   // which league team each side is (roster ids)
   useEffect(()=>lsSet('dvb.trade', sides), [sides]);
-  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The trade calculator opens once the board has players.</span></div>`;
-  const byK = Object.fromEntries([...M.rows, ...(M.picks||[])].map(r=>[r.k, r]));
-  const star = M.cfg.star;
+  useEffect(()=>lsSet('dvb.tradeTeams', sideT), [sideT]);
+  const mv = useMemo(()=>M ? marketFn(M) : null, [M]);
+  if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The trade tools open once the board has players.</span></div>`;
+  const connected = !!teams;
+  const view = !connected && tab!=='calc' ? 'calc' : tab;
+  const loadTrade = (give, get, ti) => { setSides([give, get]); setSideT([teams[me].rid, teams[ti].rid]); go('calc'); window.scrollTo(0,0); };
+  return html`<${SleeperPanel} S=${S} M=${M} cfg=${cfg} setCfg=${setCfg} hasFd=${hasFd} teams=${teams} me=${me} setMe=${setMe}/>
+    ${connected ? html`<div class="subtabs"><${Seg} label="Trade tools" value=${view} onChange=${go} opts=${[['find','Trade finder'],['calc','Calculator'],['league','League']]}/></div>` : null}
+    ${view==='find' ? html`<${Finder} teams=${teams} me=${me} M=${M} cfg=${cfg} setCfg=${setCfg} mv=${mv} onLoad=${loadTrade}/>`
+      : view==='league' ? html`<${LeagueView} teams=${teams} me=${me} M=${M} cfg=${cfg} onOpen=${onOpen} onStar=${onStar}/>`
+      : html`<${Calc} M=${M} sides=${sides} setSides=${setSides} sideT=${sideT} setSideT=${setSideT} teams=${teams} me=${me} mv=${mv} onOpen=${onOpen}/>`}`;
+}
+
+// ---- Trade calculator: totals with the star premium, then the detail: each player's numbers, value season by season,
+// board against market, and (with a league connected) what it does to both starting lineups.
+function pickShape(M){ const S = M.season, P = M.rows.filter(r=>r.dy===S && r.v>1 && r.st && r.st.yrs && r.st.yrs.length);
+  const sh = new Array(12).fill(0); P.forEach(r=>{ const t = r.st.yrs.reduce((a,y)=>a+y.yv,0)||1; r.st.yrs.slice(0,12).forEach((y,j)=>sh[j]+=y.yv/t); });
+  const t = sh.reduce((a,x)=>a+x,0)||1; return sh.map(x=>x/t); }
+function bySeason(r, M, shape, n){ const out = new Array(n).fill(0);
+  if(r.pos==='PK'){ const off = Math.max(1, (r.yr||M.season+1) - M.season); for(let j=off;j<n;j++) out[j] += r.v*(shape[j-off]||0); return out; }
+  const ys = (r.st && r.st.yrs)||[], t = ys.reduce((a,y)=>a+y.yv,0); if(!t) return out; ys.slice(0,n).forEach((y,j)=>out[j] += r.v*y.yv/t); return out; }
+function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
+  const [q, setQ] = useState(['','']);
+  const tById = teams ? Object.fromEntries(teams.map(t=>[t.rid, t])) : {};
+  const sideTeam = i => teams ? tById[sideT[i]] || (i===0 ? teams[me] : null) : null;
+  const leaguePicks = teams ? teams.flatMap(t=>t.picks) : [];
+  const byK = Object.fromEntries([...M.rows, ...(M.picks||[]), ...leaguePicks].map(r=>[r.k, r]));
+  const star = M.cfg.star, c = M.cfg;
   const tot = s => s.reduce((a,k)=>a + (byK[k] ? tradeVal(byK[k].v, star) : 0), 0);
-  // a side's total is shown as the one player it's worth: (Σ value^premium)^(1/premium)
   const T = sides.map(tot), E = T.map(t=>t>0 ? Math.pow(t, 1/star) : 0), mx = Math.max(E[0], E[1]), diff = mx ? Math.abs(E[0]-E[1])/mx : 0;
-  const need = Math.pow(Math.abs(T[0]-T[1]), 1/star);   // one player worth this closes the gap
-  const add = (i,k) => { const s = sides.map(x=>x.slice()); if(!s[i].includes(k)) s[i].push(k); setSides(s); const qq=q.slice(); qq[i]=''; setQ(qq); };
-  const rm = (i,k) => { const s = sides.map(x=>x.filter(y=>y!==k)); setSides(s); };
-  const sugg = i => { const nq = normName(q[i]); if(nq.length<2) return []; return [...M.rows, ...(M.picks||[])].filter(r=>normName(r.n).includes(nq) || (r.pos==='PK' && normName(r.n.replace(/^\\d+ (Pick )?/,'')).startsWith(nq))).slice(0,8); };
+  const need = Math.pow(Math.abs(T[0]-T[1]), 1/star);
+  const add = (i,k) => { const s = sides.map(x=>x.slice()); if(!s[i].includes(k) && !s[1-i].includes(k)) s[i].push(k); setSides(s); const qq=q.slice(); qq[i]=''; setQ(qq); };
+  const rm = (i,k) => setSides(sides.map(x=>x.filter(y=>y!==k)));
+  const sugg = i => { const nq = normName(q[i]); if(nq.length<2) return []; const st = sideTeam(i), pool = st ? [...st.rows, ...st.picks] : [...M.rows, ...(M.picks||[])];
+    return pool.filter(r=>normName(r.n).includes(nq) || (r.pos==='PK' && normName(r.n.replace(/^\d+ (Pick )?/,'')).startsWith(nq))).slice(0,8); };
+  const items = sides.map(s=>s.map(k=>byK[k]).filter(Boolean)), any = items[0].length && items[1].length;
+  // analysis
+  const NS = 6, shape = useMemo(()=>pickShape(M), [M]);
+  const yr = items.map(s=>s.reduce((acc,r)=>{ const b = bySeason(r, M, shape, NS); return acc.map((x,j)=>x+b[j]); }, new Array(NS).fill(0)));
+  const ymx = Math.max(1, ...yr[0], ...yr[1]);
+  const EM = items.map(s=>Math.pow(s.reduce((a,r)=>a+tradeVal(mv(r), star),0), 1/star));
+  const age = items.map(s=>{ const p = s.filter(r=>r.pos!=='PK'), w = p.reduce((a,r)=>a+r.v,0); return w ? p.reduce((a,r)=>a+r.v*(r.ageNow||0),0)/w : null; });
+  const teamsIn = [sideTeam(0), sideTeam(1)], lab = i => teamsIn[i] ? 'What '+teamsIn[i].name+' sends' : 'Side '+(i?'B':'A');
+  const lineImpact = teamsIn.map((t,i)=>{ if(!t) return null; const out = new Set(items[i]), inn = items[1-i].filter(r=>r.pos!=='PK');
+    const a = lineup(t.rows, c, r=>r.v), b = lineup([...t.rows.filter(r=>!out.has(r)), ...inn], c, r=>r.v); return {t, a, b}; });
+  const later = yr.map(y=>y.slice(2).reduce((a,x)=>a+x,0)), soon = yr.map(y=>y.slice(0,2).reduce((a,x)=>a+x,0));
+  const line = r => { const l = r.lines && r.lines[0], tr = r.d30;
+    return r.pos==='PK' ? 'Rookie pick' : [r.ageNow ? 'Age '+fmt(r.ageNow,1) : null, l && l.g ? fmt(l.ppg,1)+' PPG' : 'No games yet', 'Board '+r.pos+r.prank+(r.ecrPos ? ' · Experts '+r.pos+r.ecrPos : ''), tr!=null && Math.abs(tr)>=1 ? (tr>0?'▲ ':'▼ ')+fmt(Math.abs(tr))+' in 30 days' : null, r.inj || null].filter(Boolean).join(' · '); };
+  const teamSel = i => teams ? html`<select class="sel tsel" aria-label=${'Side '+(i?'B':'A')+' team'} value=${sideT[i]!=null ? sideT[i] : (i===0 && teams[me] ? teams[me].rid : '')} onChange=${e=>{ const v = e.target.value; const st = sideT.slice(); st[i] = v==='' ? null : +v; setSideT(st); }}>
+      <option value="">Any player</option>${teams.map(t=>html`<option key=${t.rid} value=${t.rid}>${t.name}</option>`)}</select>` : null;
+  const quick = i => { const t = sideTeam(i); if(!t) return null; const have = new Set([...sides[0], ...sides[1]]); const pool = [...t.rows, ...t.picks].filter(r=>!have.has(r.k)).sort((a,b)=>b.v-a.v);
+    return html`<select class="sel" aria-label="Add from roster" value="" onChange=${e=>{ if(e.target.value) add(i, e.target.value); }}><option value="">Add from ${t.name}…</option>${pool.map(r=>html`<option key=${r.k} value=${r.k}>${r.pos==='PK'?'':r.pos+' '}${r.n} · ${fmtV(r.v)}</option>`)}</select>`; };
   return html`<div class="panel"><h2>Trade calculator</h2>
-    <p class="sub">Each side's players are added up with a star premium (value<sup>${star}</sup>), so two 200s don't equal one 400. Each side's total is what the package is worth as a single player. Change the premium on the Format tab.</p></div>
-    <div class="tgrid">${[0,1].map(i=>html`<div class="panel side" key=${i}>
-      <div style=${{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><h2>Side ${i?'B':'A'}</h2><span class="mono" style=${{fontWeight:600,fontSize:18}}>${fmt(E[i])}</span></div>
-      ${sides[i].map(k=>byK[k] ? html`<div class="pick" key=${k}><span><${PosTag} p=${byK[k].pos}/> ${byK[k].n}</span><span class="mono">${fmt(byK[k].v)} <button aria-label=${'Remove '+byK[k].n} onClick=${()=>rm(i,k)}>×</button></span></div>` : null)}
+    <p class="sub">Each side's package is added up with a star premium (value<sup>${star}</sup>), so two 200s don't equal one 400. Each side's total is what the package is worth as a single player. Change the premium on the Format tab.</p></div>
+    <div class="tgrid">${[0,1].map(i=>html`<div class=${'panel side s'+i} key=${i}>
+      <div style=${{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><h2>${teamsIn[i] ? teamsIn[i].name : 'Side '+(i?'B':'A')} <span class="sideword">${teamsIn[i] ? 'sends' : ''}</span></h2><span class="mono" style=${{fontWeight:600,fontSize:18}}>${fmt(E[i])}</span></div>
+      ${teamSel(i)}
+      ${items[i].map(r=>html`<div class="pick pk2" key=${r.k}><div style=${{minWidth:0}}><button class="lnk nmb" onClick=${()=>r.pos!=='PK' && onOpen(r)}>${r.pos==='PK' ? html`<span class="pos PK">PK</span>` : html`<${PosTag} p=${r.pos}/>`} ${r.n}</button><small>${line(r)}</small></div><span class="mono">${fmtV(r.v)} <button aria-label=${'Remove '+r.n} onClick=${()=>rm(i,r.k)}>×</button></span></div>`)}
       <input id=${'tq'+i} class="search" type="search" placeholder="Add a player or pick (e.g. 2027 1st, 1.05)" value=${q[i]} onInput=${e=>{ const qq=q.slice(); qq[i]=e.target.value; setQ(qq); }}/>
-      ${sugg(i).length ? html`<div class="sugg">${sugg(i).map(r=>html`<button key=${r.k} onClick=${()=>add(i,r.k)}><span><${PosTag} p=${r.pos}/> ${r.n}</span><span class="mono">${fmt(r.v)}</span></button>`)}</div>` : null}
+      ${sugg(i).length ? html`<div class="sugg">${sugg(i).map(r=>html`<button key=${r.k} onClick=${()=>add(i,r.k)}><span>${r.pos==='PK' ? html`<span class="pos PK">PK</span>` : html`<${PosTag} p=${r.pos}/>`} ${r.n}</span><span class="mono">${fmtV(r.v)}</span></button>`)}</div>` : null}
+      ${quick(i)}
     </div>`)}</div>
-    ${!(sides[0].length+sides[1].length) ? html`<div class="panel empty"><b>Build a trade</b><span>Search a player or a pick on each side, like “Nacua” or “2027 1st”. Totals and a fair-or-not verdict appear as you add.</span></div>` : null}
-    ${T[0] && T[1] ? html`<div class=${'verdict '+(diff<0.05?'fair':'off')}>${diff<0.05 ? 'Fair: within 5% either way.' : `Side ${T[0]>T[1]?'A':'B'} gets ${fmt(100*diff,0)}% more value. Side ${T[0]>T[1]?'B':'A'} needs to add about a ${fmt(need)} player to even it.`}</div>` : null}
+    ${!(sides[0].length+sides[1].length) ? html`<div class="panel empty"><b>Build a trade</b><span>Search a player or a pick on each side, like “Nacua” or “2027 1st”.${teams ? ' Or pick each side\'s team and add straight from its roster.' : ''} Totals and the breakdown appear as you add.</span></div>` : null}
+    ${T[0] && T[1] ? html`<div class=${'verdict '+(diff<0.05?'fair':'off')}>${diff<0.05 ? 'Fair: within 5% either way.' : teamsIn[0] && teamsIn[1] ? `${teamsIn[T[0]>T[1]?1:0].name} comes out ahead: it gets ${fmt(100*diff,0)}% more value. To even it, ${teamsIn[T[0]>T[1]?1:0].name} would add about a ${fmt(need)} player to what it sends.` : `Side ${T[0]>T[1]?'A':'B'} is worth ${fmt(100*diff,0)}% more. Add about a ${fmt(need)} player to side ${T[0]>T[1]?'B':'A'} to even it.`}</div>` : null}
+    ${any ? html`<div class="tgrid2">
+      <div class="panel"><h3 style=${{marginTop:0}}>Value by season</h3><p class="note">Where each side's value lands: this season on the left, five seasons out on the right. Picks start counting the season after their draft.</p>
+        <div class="ybars">${yr[0].map((_,j)=>html`<div key=${j} class="yb"><div class="yp">${[0,1].map(i=>html`<i key=${i} class=${'s'+i} style=${{height:(100*yr[i][j]/ymx)+'%'}} title=${fmt(yr[i][j])}></i>`)}</div><span>${"'"+String(M.season+j).slice(2)}</span></div>`)}</div>
+        <div class="legend"><span><i class="s0"></i>${lab(0)}</span><span><i class="s1"></i>${lab(1)}</span></div>
+        <p class="note">Next two seasons: ${fmt(soon[0])} vs ${fmt(soon[1])}. After that: ${fmt(later[0])} vs ${fmt(later[1])}. ${(soon[0]>soon[1]) !== (later[0]>later[1]) ? `${lab(soon[0]>soon[1]?0:1)} holds more value in the next two seasons; ${lab(soon[0]>soon[1]?1:0).replace(/^W/,'w')} holds more after that.` : ''}</p></div>
+      <div class="panel"><h3 style=${{marginTop:0}}>Board vs market</h3><p class="note">The board's value against what expert consensus would pay. A side the market rates higher than the board is a good one to send.</p>
+        ${[0,1].map(i=>{ const m2 = Math.max(E[0],E[1],EM[0],EM[1])||1; return html`<div key=${i} class="bvm"><b>${lab(i)}</b>
+          <div class="bvr"><span>Board</span><div class="bar"><i class=${'s'+i} style=${{width:(100*E[i]/m2)+'%'}}></i></div><span class="mono">${fmt(E[i])}</span></div>
+          <div class="bvr"><span>Market</span><div class="bar"><i class=${'s'+i+' mk'} style=${{width:(100*EM[i]/m2)+'%'}}></i></div><span class="mono">${fmt(EM[i])}</span></div></div>`; })}
+        <p class="note">${(()=>{ const bd = E[0]-E[1], md = EM[0]-EM[1], m0 = Math.max(EM[0],EM[1])||1;
+          const pct = fmt(100*Math.abs(md)/m0,0); return Math.abs(md)/m0<0.05 ? 'At market prices the two packages are close to even.' : Math.sign(bd)!==Math.sign(md) ? `The market sees it the other way: at consensus prices ${lab(md>0?0:1).replace(/^W/,'w')} is worth ${pct}% more.` : `The market agrees: ${lab(md>0?0:1).replace(/^W/,'w')} is worth ${pct}% more at consensus prices.`; })()}</p></div>
+      <div class="panel"><h3 style=${{marginTop:0}}>Age and positions</h3>
+        ${[0,1].map(i=>{ const tv = items[i].reduce((a,r)=>a+r.v,0)||1, by = {}; items[i].forEach(r=>by[r.pos]=(by[r.pos]||0)+r.v);
+          return html`<div key=${i} class="bvm"><b>${lab(i)}</b><span class="note"> · ${age[i]!=null ? 'value-weighted age '+fmt(age[i],1) : 'picks only'}</span>
+            <div class="mix">${['QB','RB','WR','TE','PK'].filter(q=>by[q]).map(q=>html`<i key=${q} class=${'m'+q} style=${{width:(100*by[q]/tv)+'%'}} title=${q}>${by[q]/tv>0.14?q:''}</i>`)}</div></div>`; })}</div>
+      ${lineImpact.some(Boolean) ? html`<div class="panel"><h3 style=${{marginTop:0}}>Starting lineups</h3><p class="note">Each team's best starting lineup on this board, before and after.</p>
+        ${lineImpact.filter(Boolean).map(({t,a,b})=>html`<div key=${t.rid} class="bvm"><b>${t.name}</b> <span class=${'mono '+(b.tot-a.tot>=0.5?'up':b.tot-a.tot<=-0.5?'dn':'')}>${fmt(a.tot)} → ${fmt(b.tot)} (${b.tot-a.tot>=0?'+':''}${fmt(b.tot-a.tot)})</span>
+          <div class="lchg">${POS.filter(q=>Math.abs(b.by[q]-a.by[q])>=0.5).map(q=>html`<span key=${q} class=${b.by[q]>a.by[q]?'up':'dn'}>${q} ${b.by[q]>a.by[q]?'+':''}${fmt(b.by[q]-a.by[q])}</span>`)}</div></div>`)}</div>` : null}
+    </div>` : null}
     ${sides[0].length+sides[1].length ? html`<div><button class="btn" onClick=${()=>setSides([[],[]])}>Clear both sides</button></div>` : null}`;
 }
 
@@ -1445,7 +1741,7 @@ function App(){
           const r = await fetch('data.json', {cache:'no-store'}); if(!r.ok) throw new Error('no data');
           const d = await r.json(), o = {};
           ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{ o[k] = d[k]||null; o['_'+k] = true; });
-          if(d.ecr0) o.ecr0 = d.ecr0;
+          if(d.ecr0) o.ecr0 = d.ecr0; if(d.slmap) o.slmap = d.slmap;
           setD(o);
           fetch('comps.json').then(x=>x.ok?x.json():null).then(c=>{ if(c && c.v===2 && alive) setD(o2=>({...o2, comps:c})); }).catch(()=>{});
         }catch(e){ setStatus(s=>({...s, err:'Sign in to claude.ai to see the board.'})); }
@@ -1454,6 +1750,7 @@ function App(){
       ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{
         unsubs.push(db.doc('board/'+k).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; setD(o=>({...o, [k]:d, ['_'+k]:true})); }, ()=>{}));
       });
+      unsubs.push(db.doc('board/slmap').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d) setD(o=>({...o, slmap:d})); }, ()=>{}));   // Sleeper ids (older boards)
       unsubs.push(db.doc('board/ecr0').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d) setD(o=>({...o, ecr0:d})); }, ()=>{}));   // optional: report card
       // comparable-players library, stored in four parts (optional: the board works without it)
       { const parts = {}; [1,2,3,4,5,6,7,8].forEach(i=>unsubs.push(db.doc('board/comps'+i).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(!d || d.v!==2) return; parts[i] = d;
@@ -1474,7 +1771,7 @@ function App(){
     const OV = (D.injuries&&D.injuries.rows)||{}, OL = (D.outlook&&D.outlook.rows)||{};
     POS.forEach(q=>Object.entries((D[q]&&D[q].rows)||{}).forEach(([k,e])=>{
       if(e.nf || !e.s || e.age==null) return;
-      out.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, wk:e.wk||null, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, comp:e.comp||null, px:e.px||null, fa:e.fa||null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null});
+      out.push({k, n:e.n, pos:q, sl:e.sl||null, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, wk:e.wk||null, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, comp:e.comp||null, px:e.px||null, fa:e.fa||null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null});
     }));
     return out;
   }, [D.QB, D.RB, D.WR, D.TE, D.injuries, D.outlook]);
@@ -1524,7 +1821,7 @@ function App(){
         : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
         : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine}/>`
         : view==='chart' ? html`<${Chart} M=${M} mine=${mine} onOpen=${r=>setOpen(r.k)}/>`
-        : view==='trade' ? html`<${Trade} M=${M}/>`
+        : view==='trade' ? html`<${Trade} M=${M} cfg=${cfg} setCfg=${setCfg} players=${players} slmap=${D.slmap||null} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))} onOpen=${r=>setOpen(r.k)} onStar=${keys=>{ const s = new Set(keys); setMine(s); lsSet('dvb.mine', [...s]); }}/>`
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
         : html`<${Method} M=${M} meta=${D.meta} players=${players} cfg=${cfg} D=${D} onOpen=${r=>setOpen(r.k)}/>`}
     </main>
