@@ -1581,11 +1581,11 @@ function LeagueView({teams, me, M, cfg, mv, lg, mv0, onOpen, onStar}){
         return html`<div class="panel"><h2>Your league's market</h2>
           <p class="sub">${lg.trades.length} trade${lg.trades.length===1?'':'s'} in this league this season and last that the board can value. ${lg.m ? 'The trade tools judge "would they accept" at these prices: FantasyCalc, adjusted to what your leaguemates actually pay.' : 'At least 5 are needed before the tools adjust to your league; until then they use FantasyCalc as it is.'}</p>
           ${lg.m ? html`<div class="lgm">${LG_CLS.map(c=>html`<div key=${c}><span>${c==='PK'?'Picks':lab[c]}</span><b class="mono">${Math.abs(lg.m[c]-1)<0.005 ? '0%' : (lg.m[c]>1?'+':'−')+fmt(Math.abs(lg.m[c]-1)*100,0)+'%'}</b></div>`)}</div>
-            <p class="note">${diffs.length ? 'Compared with the public market, your league pays '+diffs.map(([c,x])=>`${fmt(Math.abs(x-1)*100,0)}% ${x>1?'more':'less'} for ${lab[c]}`).join(', ')+'.' : 'Your league prices players about the same as the public market.'} Players are valued today, so older trades carry some hindsight.</p>` : null}
-          ${recent.length ? html`<h3>Recent trades</h3><div class="lgtr">${recent.map((t,i)=>{ const bA = E(t.got[0], V), bB = E(t.got[1], V), mA = E(t.got[0], mv0), mB = E(t.got[1], mv0), wb = bA>=bB?0:1, wm = mA>=mB?0:1, gb = Math.abs(bA-bB)/Math.max(bA,bB,1), gm = Math.abs(mA-mB)/Math.max(mA,mB,1);
+            <p class="note">${diffs.length ? 'Compared with the public market, your league pays '+diffs.map(([c,x])=>`${fmt(Math.abs(x-1)*100,0)}% ${x>1?'more':'less'} for ${lab[c]}`).join(', ')+'.' : 'Your league prices players about the same as the public market.'} ${lg.hind ? 'Each trade is valued as of its date, from the board as it stood then, so later breakouts and injuries don\'t count.' : 'Rebuilding past boards to value each trade as of its date…'}</p>` : null}
+          ${recent.length ? html`<h3>Recent trades</h3><div class="lgtr">${recent.map((t,i)=>{ const Ev = xs => Math.pow(xs.reduce((a,v)=>a+tradeVal(v, star), 0), 1/star), bA = Ev(t.brd[0]), bB = Ev(t.brd[1]), mA = Ev(t.pub[0]), mB = Ev(t.pub[1]), wb = bA>=bB?0:1, wm = mA>=mB?0:1, gb = Math.abs(bA-bB)/Math.max(bA,bB,1), gm = Math.abs(mA-mB)/Math.max(mA,mB,1);
             return html`<div class="lgt" key=${i}><div class="lgth"><span class="eyebrow">${new Date(t.at).toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'})}</span></div>
               ${[0,1].map(s=>html`<div key=${s} class="lgts"><b>${name(t.rids[s])} got</b> ${t.got[s].map(r=>r.n).join(', ')}</div>`)}
-              <p class="note">Board: ${gb<0.05 ? 'even' : name(t.rids[wb])+' won by '+fmt(100*gb,0)+'%'}. Public market: ${gm<0.05 ? 'even' : name(t.rids[wm])+' won by '+fmt(100*gm,0)+'%'}.</p></div>`; })}</div>` : null}</div>`; })() : null}
+              <p class="note">${t.hind ? 'On the day: ' : ''}board ${gb<0.05 ? 'even' : name(t.rids[wb])+' won by '+fmt(100*gb,0)+'%'}; public market ${gm<0.05 ? 'even' : name(t.rids[wm])+' won by '+fmt(100*gm,0)+'%'}.${(()=>{ if(!t.hind) return ''; const nA = Ev(t.got[0].map(V)), nB = Ev(t.got[1].map(V)), wn = nA>=nB?0:1, gn = Math.abs(nA-nB)/Math.max(nA,nB,1); return ' Today: '+(gn<0.05 ? 'even' : name(t.rids[wn])+' ahead by '+fmt(100*gn,0)+'%')+'.'; })()}</p></div>`; })}</div>` : null}</div>`; })() : null}
     <div class="panel"><h2>League value</h2><p class="sub">Every team's players and picks on this board. The darker part of each bar is the starting lineup.</p>
       <div class="lgbars">${byAll.map(x=>html`<div key=${x.t.rid} class=${'lgb'+(x.i===me?' me':'')}><span class="nm">${x.t.name}</span><div class="bar"><i class="all" style=${{width:(100*x.all/mx)+'%'}}></i><i class="st" style=${{width:(100*x.l.tot/mx)+'%'}}></i></div><b class="mono">${fmtV(x.all)}</b></div>`)}</div></div>
     ${mine ? html`<div class="panel"><h2>Your roster</h2><div class="tblwrap"><table><thead><tr><th>Player</th><th>Board</th><th>${mv.label}</th><th>Value</th></tr></thead><tbody>
@@ -1651,7 +1651,7 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
             ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>=0.04*Math.max(x.gM,x.rM)?', and they win the trade at market prices':''}.</li>` : x.theirMk>=0.04*Math.max(x.gM,x.rM) ? html`<li>Why they'd say yes: at market prices they come out ahead.</li>` : null}</ul></div>`; })}`;
 }
 
-function Trade({M, cfg, setCfg, players, slmap, fc, hasFd, onOpen, onStar}){
+function Trade({M, cfg, setCfg, players, slmap, fc, H, needH, hasFd, onOpen, onStar}){
   const S = useSleeper();
   const idx = useMemo(()=>slIndex(players, slmap), [players, slmap]);
   const teams = useMemo(()=>S.L && M ? leagueTeams(S.L, M, idx, Date.now()) : null, [S.L, M, idx]);
@@ -1666,8 +1666,13 @@ function Trade({M, cfg, setCfg, players, slmap, fc, hasFd, onOpen, onStar}){
   useEffect(()=>lsSet('dvb.tradeTeams', sideT), [sideT]);
   const mv0 = useMemo(()=>M ? marketFn(M, fc, idx) : null, [M, fc, idx]);
   // your league's market: the public market adjusted by what your leaguemates actually pay (5+ league trades needed)
+  useEffect(()=>{ if(S.L && S.L.trades && S.L.trades.length) needH(); }, [S.L]);   // past boards, to value each trade as of its date
   const lg = useMemo(()=>{ if(!M || !mv0 || !S.L || !S.L.trades) return null; const tr = leagueTrades(S.L, M, idx, Date.now());
-    return {trades:tr, m: tr.length>=5 ? fitLeagueMarket(tr, mv0, M.cfg.star) : null}; }, [M, mv0, S.L, idx]);
+    const then = boardThen(H, M);
+    tr.forEach(t=>{ t.cls = t.got.map(s=>s.map(r=>r.pos==='PK' ? 'PK' : r.pos));
+      t.brd = t.got.map(s=>s.map(r=>r.pos==='PK' ? r.v : (then ? then(r, t.at) : r.v)));
+      t.pub = t.got.map((s,i)=>s.map((r,j)=>r.pos==='PK' || !then ? mv0(r) : mv0(r)*Math.max(0.2, Math.min(5, t.brd[i][j]/Math.max(1, r.v))))); t.hind = !!then; });
+    return {trades:tr, hind:!!then, m: tr.length>=5 ? fitLeagueMarket(tr, M.cfg.star) : null}; }, [M, mv0, S.L, idx, H]);
   const mv = useMemo(()=>{ if(!mv0) return null; if(!lg || !lg.m) return mv0; const m = lg.m;
     const f = r => mv0(r)*(m[r && r.pos==='PK' ? 'PK' : r && r.pos]||1); f.rank = mv0.rank; f.label = mv0.label; f.src = mv0.src+' + your league\'s trades'; f.base = mv0.src; f.lg = m; f.at = mv0.at; f.tep = mv0.tep; return f; }, [mv0, lg]);
   if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The trade tools open once the board has players.</span></div>`;
@@ -1686,7 +1691,8 @@ function Trade({M, cfg, setCfg, players, slmap, fc, hasFd, onOpen, onStar}){
 // recent ones counting most: half-life 90 days) is assumed to have looked fair to both managers. Starting from the public
 // market (FantasyCalc), one price multiplier per kind of asset (QB, RB, WR, TE, draft picks) is fitted so those trades come
 // out as even as possible, pulled toward the public price (a kind of asset needs 3+ trades to move at all), centred so the
-// average kind keeps its public price, and kept within -25%/+33%. Players are valued today, so older trades carry some hindsight.
+// average kind keeps its public price, and kept within -25%/+33%. Each trade is valued as of its date (boardThen): the board as it
+// stood then, and the public price scaled by how the board has moved on that player since (FantasyCalc keeps no history).
 const LG_CLS = ['QB','RB','WR','TE','PK'];
 function leagueTrades(L, M, idx, now){
   if(!L || !L.trades || !L.trades.length) return [];
@@ -1699,12 +1705,21 @@ function leagueTrades(L, M, idx, now){
     const rids = Object.keys(side); if(rids.length!==2) return null;
     return {at:t.status_updated||t.created||0, rids:rids.map(Number), got:rids.map(k=>side[k]), w:Math.pow(0.5, Math.max(0, now-(t.status_updated||t.created||now))/(90*864e5))}; }).filter(Boolean);
 }
-function fitLeagueMarket(trades, mv, star){
-  const cls = r => r.pos==='PK' ? 'PK' : r.pos, E = (xs, m) => Math.pow(xs.reduce((a,r)=>a+tradeVal(mv(r)*m[cls(r)], star), 0), 1/star);
+// the board's value for a player on a past date, from the rebuilt past boards (season ends and every week of this season),
+// joined in a straight line between the boards either side of the date; today's board is the last point
+function boardThen(H, M){ if(!H || !H.length) return null; const now = Date.now();
+  const snaps = [...H.map(x=>({t:x.t, by:x.by})), {t:now, by:Object.fromEntries(M.rows.map(r=>[r.k, {v:r.v}]))}].sort((a,b)=>a.t-b.t);
+  return (r, at) => { const pts = snaps.filter(s=>s.by[r.k]).map(s=>[s.t, s.by[r.k].v]); if(!pts.length) return r.v;
+    if(at<=pts[0][0]) return pts[0][1]; if(at>=pts[pts.length-1][0]) return pts[pts.length-1][1];
+    for(let i=1;i<pts.length;i++) if(at<=pts[i][0]){ const f = (at-pts[i-1][0])/Math.max(1, pts[i][0]-pts[i-1][0]); return pts[i-1][1] + f*(pts[i][1]-pts[i-1][1]); }
+    return r.v; }; }
+function fitLeagueMarket(trades, star){
+  // each trade side: its public values as of the trade date (t.pub) and the kind of each asset (t.cls)
+  const E = (t, s, m) => Math.pow(t.pub[s].reduce((a,v,j)=>a+tradeVal(v*m[t.cls[s][j]], star), 0), 1/star);
   // how many trades each kind of asset appears in; a kind needs 3 before it can move off the public price
-  const n = {}; trades.forEach(t=>new Set(t.got.flat().map(cls)).forEach(c=>n[c]=(n[c]||0)+1));
+  const n = {}; trades.forEach(t=>new Set(t.cls.flat()).forEach(c=>n[c]=(n[c]||0)+1));
   const free = LG_CLS.filter(c=>(n[c]||0)>=3);
-  const loss = m => trades.reduce((a,t)=>{ const A = E(t.got[0], m), B = E(t.got[1], m); return a + (A>0 && B>0 ? t.w*Math.pow(Math.log(A/B), 2) : 0); }, 0)
+  const loss = m => trades.reduce((a,t)=>{ const A = E(t, 0, m), B = E(t, 1, m); return a + (A>0 && B>0 ? t.w*Math.pow(Math.log(A/B), 2) : 0); }, 0)
     + LG_PRIOR*LG_CLS.reduce((a,c)=>a+Math.pow(Math.log(m[c]), 2), 0);   // the pull toward the public market
   const m = Object.fromEntries(LG_CLS.map(c=>[c,1]));
   for(let it=0; it<6; it++) for(const c of free){ let best = m[c], bl = loss(m);
@@ -2128,16 +2143,16 @@ function App(){
   const saveDef = async c => { const db = dbRef.current; if(!db) return; await db.doc('board/defaults').set({cfg:{...c}}); setCfgL(null); lsSet('dvb.cfg', null); };
 
   // value history: built the first time a player is opened (about a dozen past boards), then kept until the data or format changes
-  const [hist, setHist] = useState(null);
+  const [hist, setHist] = useState(null), [wantHist, setWantHist] = useState(false);
   const histKey = M ? JSON.stringify(cfg)+'|'+(D.meta&&D.meta.at)+'|'+JSON.stringify((D.adj&&D.adj.rows)||{})+'|'+(D.comps?1:0) : '';
   useEffect(()=>{
-    if(!open || !M || (hist && hist.key===histKey)) return;
+    if(!(open || wantHist) || !M || (hist && hist.key===histKey)) return;
     const t = setTimeout(()=>{ try{
       const H = valueHistory(players, {...cfg, __class:(D.classes&&D.classes.years)||{}, __comps:D.comps||null}, (D.adj&&D.adj.rows)||{}, M.season, now);
       setHist({key:histKey, H});
     }catch(e){ console.error(e); setHist({key:histKey, H:[]}); } }, 60);
     return ()=>clearTimeout(t);
-  }, [open, histKey, !!M]);
+  }, [open, wantHist, histKey, !!M]);
   const st = D.meta && D.meta.at ? html`<span class="chip"><span class="dot"></span>${ago(D.meta.at)}</span>` : null;
   const openRow = open && M ? M.rows.find(r=>r.k===open) : null;
   return html`<header class="top"><div class="wrap">
@@ -2150,7 +2165,7 @@ function App(){
         : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
         : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine}/>`
         : view==='chart' ? html`<${Chart} M=${M} mine=${mine} onOpen=${r=>setOpen(r.k)}/>`
-        : view==='trade' ? html`<${Trade} M=${M} cfg=${cfg} setCfg=${setCfg} players=${players} slmap=${D.slmap||null} fc=${D.fc||null} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))} onOpen=${r=>setOpen(r.k)} onStar=${keys=>{ const s = new Set(keys); setMine(s); lsSet('dvb.mine', [...s]); }}/>`
+        : view==='trade' ? html`<${Trade} M=${M} cfg=${cfg} setCfg=${setCfg} players=${players} slmap=${D.slmap||null} fc=${D.fc||null} H=${hist && hist.key===histKey ? hist.H : null} needH=${()=>setWantHist(true)} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))} onOpen=${r=>setOpen(r.k)} onStar=${keys=>{ const s = new Set(keys); setMine(s); lsSet('dvb.mine', [...s]); }}/>`
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
         : html`<${Method} M=${M} meta=${D.meta} players=${players} cfg=${cfg} D=${D} onOpen=${r=>setOpen(r.k)}/>`}
     </main>
