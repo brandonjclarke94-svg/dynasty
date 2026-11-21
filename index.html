@@ -595,10 +595,19 @@ function weighted(lines, Q, f){
   return {num, den, gms, ppg: den>0 ? num/den : null};
 }
 // Lifetime value. Returns the steps so the page can show its work.
-function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle){
+function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle, Rs){
   const md = MODES[mode] || MODES.neutral;
   dcw = dcw==null ? 1 : dcw;
   const c = PV[Q], sc = R/c.Rp, st = {R, sc};
+  // Draft-slot anchors (the draft-slot lift in the starting guess, and the draft-capital prior) are absolute scoring levels: they follow
+  // your scoring (PPR, TD points) but NOT how deep your lineups are. A pick-3 QB doesn't score more because a 1QB league has a
+  // higher replacement QB. Rs = replacement at the reference lineup depth under your scoring (Nov 21 2026 fix: these anchors
+  // used R, which made rookie QBs jump in 1QB).
+  // How much of that applies: all of it with no NFL record (a prospect or an unplayed rookie, still judged on draft slot), fading
+  // as his own games take over (the same weight his record gets against the starting guess) and with age as draft slot stops mattering.
+  // Players with a real NFL record keep the replacement-relative scale, which lines up with the public market in every format.
+  const youth0 = Math.max(0, Math.min(1, (26 - age)/3)), recW = (w.den||0)/((w.den||0) + c.shr), kAbs = ABS_K*youth0*(1 - recW);
+  const Ra = Rs!=null ? R + (Rs - R)*kAbs : R, sa = Ra/c.Rp;
   let ppg;
   // thin samples are pulled toward what a player like this usually becomes: a first-round pick near or above replacement,
   // a late-round or undrafted player below it. A long track record outweighs this.
@@ -608,7 +617,7 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle)
   // with two seasons of ordinary play isn't a prospect any more. Backtested: helps RB rankings, hurts WR/QB, so RB only.
   const expF = 1 - (c.xf||0)*Math.min(1, (w.gms||0)/(GF*17));
   const youth = Math.max(0, Math.min(1, (26 - age)/3))*expF;     // draft slot stops mattering by about 26
-  const target = R*Math.min(1.1, (c.tb!=null?c.tb:TGT.base) + rook*dcw*tdp*youth);
+  const target = Math.min(1.1*R, Ra*(c.tb!=null?c.tb:TGT.base) + Ra*rook*dcw*tdp*youth);
   st.target = target;
   // one path from draft night on: a player with no games is simply an empty record, so the anchor alone. Nothing jumps on his first snap.
   if(w.den>0) ppg = (w.num + c.shr*target)/(w.den + c.shr);
@@ -617,7 +626,7 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle)
   if(w.den>0 && idle && !bench){ st.idle = BENCH*idle; ppg *= 1 - st.idle; }
   st.shrunk = ppg;
   if(dp && age < 25.5 && c.lam >= 0.02){   // (QBs: the fit gave this ~no weight, so it's skipped)
-    const prior = Math.max(0, (c.dpA - 3.3*Math.log(dp))*sc);
+    const prior = Math.max(0, (c.dpA - 3.3*Math.log(dp))*sa);
     // pedigree fades with age and with games played: after about two full seasons, production does the talking
     const l = Math.min(0.9, c.lam*dcw) * Math.min(1, (25.5-age)/3) * Math.max(0, 1 - (w.gms||0)/(GF*17));
     ppg = (1-l)*ppg + l*prior; st.prior = prior; st.lam = l; st.lift = l*(prior - st.shrunk);
@@ -635,7 +644,7 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle)
   let s=0, sm=0, surv=1; const yrs=[];
   for(let j=0;j<25;j++){
     const t = age+j; if(j>0) surv *= 1 - 1/(1+Math.exp(-(t-c.mid))); if(surv<0.01) break;
-    const sd = rsd*c.sig*upside*md.up*sc*(1 + c.ys*yf*expF*Math.max(0,25-t)/3)*(1+0.15*j), z = (ppg-R)/sd;
+    const sd = rsd*c.sig*upside*md.up*sa*(1 + c.ys*yf*expF*Math.max(0,25-t)/3)*(1+0.15*j), z = (ppg-R)/sd;
     const yv = Math.pow(c.d,j)*surv*(sd*nPdf(z) + (ppg-R)*nCdf(z));
     s += yv; sm += md.yr(j)*yv; yrs.push({age:t, surv, yv:yv*c.k});
   }
@@ -723,6 +732,7 @@ const CALIB_K = 0.75, CALIB_V = [40, 160];   // strength below a value of 40, fa
                                              // with the public market's position mix) is left alone; full strength there floods superflex tops with QBs
 function calibMap(tab, v){ if(!tab || tab.length<2 || !(v>0)) return v; const lx = Math.log(v); let i = 1; while(i<tab.length-1 && lx>Math.log(tab[i][0])) i++;
   const x0=Math.log(tab[i-1][0]), x1=Math.log(tab[i][0]), y0=Math.log(tab[i-1][1]), y1=Math.log(tab[i][1]); return Math.exp(y0+(lx-x0)*(y1-y0)/(x1-x0)); }
+const ABS_K = 0.65;   // how far draft-slot anchors move to the absolute scale (1QB vs superflex check: QB prospects fall in 1QB, NFL QBs keep their market alignment)
 const LOST_MD = 0.3;   // extra markdown for a non-starter RB/WR's lost season (backtested)
 const topF = x => x>TOP_T ? TOP_T*Math.pow(x/TOP_T, TOP_G) : x;
 function rankAll(players, cfgIn, now, adj){
@@ -740,6 +750,9 @@ function rankAll(players, cfgIn, now, adj){
   const lr = cfg => replacement(rows.map(r=>({pos:r.pos, w:weighted([0,1,2,3].map(i=>seasonPts(r.p.s&&r.p.s[[S,S-1,S-2,S-3][i]], r.pos, cfg, true)), r.pos, fS)})).filter(x=>x.w.gms>=4).map(x=>({pos:x.pos, ppg:x.w.ppg})), cfg);
   const mine = lr(c), ref = lr({...DEF, ...REF});
   const R = {}, N = mine.N; POS.forEach(q=>{ R[q] = PV[q].Rp * (mine.R[q] / (ref.R[q]||mine.R[q]||1)); });
+  // your scoring at the reference lineup depth: the scale for draft-slot anchors (see lifetime)
+  const depth = {teams:REF.teams||DEF.teams, qb:REF.qb!=null?REF.qb:DEF.qb, rb:REF.rb||DEF.rb, wr:REF.wr||DEF.wr, te:REF.te||DEF.te, flex:REF.flex!=null?REF.flex:DEF.flex, sf:REF.sf!=null?REF.sf:DEF.sf};
+  const sco = lr({...c, ...depth}), Rs = {}; POS.forEach(q=>{ Rs[q] = PV[q].Rp * (sco.R[q] / (ref.R[q]||sco.R[q]||1)); });
   let out = [];
   if(c.league==='redraft'){
     let gS0 = 0; rows.forEach(r=>{ const l=r.lines[0]; if(l && l.g>gS0) gS0=l.g; });
@@ -776,7 +789,7 @@ function rankAll(players, cfgIn, now, adj){
     // unsigned this deep into a season (released, or nobody signed him): his expected scoring is marked down up to 50% by
     // week 8. He can still sign somewhere next year, so his value doesn't go to zero.
     const una = r.fa && gS > 0 ? 1 - FA_MD*bench : 1;
-    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj && !r.fa, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, pb, outMult(r.out, false)*ef*una, idle && !r.fa ? idle : 0);
+    const st = lifetime(r.pos, wv, r.ageNow, dpE, !!r.inj && !r.fa, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, pb, outMult(r.out, false)*ef*una, idle && !r.fa ? idle : 0, Rs[r.pos]);
     if(una < 1) st.una = 1 - una;
     if(ef!==1) st.env = {f:ef, e:c.__env[r.team]};
     if(r.moved) st.moved = r.moved; if(r.out) st.out = r.out;
@@ -788,7 +801,7 @@ function rankAll(players, cfgIn, now, adj){
     // how much injury, benching, being unsigned and situation took off him: comparable players know none of that, so their
     // forecast gets the same haircut (otherwise blending with them would quietly undo an IR markdown)
     { const om0 = outMult(r.out, false)*ef*una;
-      if(r.inj || st.missF || pb || st.idle || om0!==1){ const s0 = lifetime(r.pos, wv, r.ageNow, dpE, false, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, 0, 1, 0); r.sitF = s0.value>0 ? Math.min(2, st.value/s0.value) : 1; } }
+      if(r.inj || st.missF || pb || st.idle || om0!==1){ const s0 = lifetime(r.pos, wv, r.ageNow, dpE, false, R[r.pos], c.upside*(contrib?MOVE_SPREAD:1), c.dcw, c.mode, 0, 1, 0, Rs[r.pos]); r.sitF = s0.value>0 ? Math.min(2, st.value/s0.value) : 1; } }
     const a = +adj[r.k]||0;
     if(w0!==r.w) st.hurtW = 1;
     out.push({...r, w:w0, st, base:st.value, adj:a, v: st.value*(1+a/100)});
