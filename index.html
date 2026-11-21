@@ -473,6 +473,18 @@ button.row{cursor:pointer}
   main{padding-bottom:120px}
 }
 @media (prefers-reduced-motion: reduce){nav.tabs button span{transition:none}}
+
+.mkt{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;font-family:var(--f-mono)}
+.mkt.above{background:var(--good-bg);color:var(--good)} .mkt.below{background:var(--bad-bg);color:var(--bad)}
+.mktnote{font-size:13px;border-radius:10px;padding:8px 10px;margin:8px 0 0}
+.mktnote.above{background:var(--good-bg);color:var(--ink)} .mktnote.below{background:var(--bad-bg);color:var(--ink)}
+
+.lgm{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:10px 0 6px}
+.lgm div{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:7px 6px;text-align:center;min-width:0}
+.lgm span{display:block;font-size:11.5px;color:var(--muted)} .lgm b{font-size:15px}
+.lgtr{display:grid;gap:8px;margin-top:6px}
+.lgt{border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:grid;gap:3px;background:var(--raised)}
+.lgts{font-size:13px;color:var(--ink2)} .lgts b{color:var(--ink)}
 </style>
 
 <div id="root"></div>
@@ -960,7 +972,8 @@ function Row({r, top, onOpen, posView, mv, eg, star}){
         ${r.adj ? html`<span class="tag adj">${r.adj>0?'+':''}${r.adj}%</span>` : null}
         ${mv && r.d30!=null ? html`<span class="ecr">since wk ${mv}: <b class=${r.d30>=0?'up':'dn'}>${r.d30>=0?'+':''}${fmt(r.d30)}</b>${r.r30Overall && r.r30Overall!==r.rank ? ` · was #${r.r30Overall}` : ''}</span>` : null}
         ${ex ? html`<span class="ecr mob" title=${'Expert consensus rank '+ex}>ECR ${ex}${d ? html` <b class=${d>0?'up':'dn'}>${d>0?'▲'+d:'▼'+(-d)}</b>` : null}</span>` : null}
-        ${eg && r.eGap!=null ? html`<span class="ecr"><b class=${r.eGap>0?'up':'dn'}>${r.eGap>0?'+':''}${fmt(r.eGap)} value</b> vs ECR spot</span>` : null}</div>
+        ${eg && r.eGap!=null ? html`<span class="ecr"><b class=${r.eGap>0?'up':'dn'}>${r.eGap>0?'+':''}${fmt(r.eGap)} value</b> vs ECR spot</span>` : null}
+        ${r.pubFlag ? html`<span class=${'mkt '+r.pubFlag} title=${'Public market (FantasyCalc, real trades): '+r.pos+r.pubPos+'. The board has him '+(r.pubFlag==='above'?'well above':'well below')+' that.'}>Market ${r.pos}${r.pubPos}</span>` : null}</div>
     </span>
     <span class="c"><${PosTag} p=${r.pos} n=${r.prank}/></span>
     <span class="c">${fmt(r.ageNow,1)}</span>
@@ -1000,6 +1013,9 @@ function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine}
     rows = rows.filter(r=>r.eGap!=null && (sort==='above' ? r.eGap>0.5 : r.eGap<-0.5));
     rows.sort((a,b)=> sort==='above' ? b.eGap-a.eGap : a.eGap-b.eGap);
   }
+  if(sort==='pabove' || sort==='pbelow'){   // where the board and the public trade market (FantasyCalc) disagree most, in value
+    rows = rows.filter(r=>r.pubGap!=null && (sort==='pabove' ? r.pubGap>0.5 : r.pubGap<-0.5));
+    rows.sort((a,b)=> sort==='pabove' ? b.pubGap-a.pubGap : a.pubGap-b.pubGap); }
   if(isMove){  // value gained or lost over the last four weeks of games, among players in the top 300 now or then
     rows = rows.filter(r=>r.d30!=null && (r.rank<=300 || (r.r30Overall||999)<=300) && (sort==='up' ? r.d30>0.5 : r.d30<-0.5));
     rows.sort((a,b)=> sort==='up' ? b.d30-a.d30 : a.d30-b.d30);
@@ -1024,7 +1040,7 @@ function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine}
         </div>
       <div class="controls">
         <select class="sel" aria-label="View" value=${sort} onChange=${e=>{ setSort(e.target.value); setLim(150); }}>
-          ${[['rank','My ranks'], ...(M.w30?[['up','Risers · 30 days'],['down','Fallers · 30 days']]:[]), ...(hasEcr?[['above','Above consensus'],['below','Below consensus']]:[])].map(([v,l])=>html`<option key=${v} value=${v}>${l}</option>`)}
+          ${[['rank','My ranks'], ...(M.w30?[['up','Risers · 30 days'],['down','Fallers · 30 days']]:[]), ...(hasEcr?[['above','Above consensus'],['below','Below consensus']]:[]), ...(M.rows.some(r=>r.pubPos)?[['pabove','Above public market'],['pbelow','Below public market']]:[])].map(([v,l])=>html`<option key=${v} value=${v}>${l}</option>`)}
         </select>
         <select class="sel" aria-label="Team" value=${team} onChange=${e=>setTeam(e.target.value)}><option value="all">All teams</option>${teams.map(t=>html`<option key=${t} value=${t}>${t}</option>`)}</select>
         <select class="sel" aria-label="Age" value=${age} onChange=${e=>setAge(e.target.value)}>${AGES.map(([v,l])=>html`<option key=${v} value=${v}>${l}</option>`)}</select>
@@ -1336,7 +1352,8 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
   return html`<div class="scrim" onClick=${e=>{ if(e.target===e.currentTarget) onClose(); }}>
    <div class="sheet" role="dialog" aria-modal="true" aria-label=${r.n}>
     <${SheetHead} r=${r} M=${M} onClose=${onClose} starred=${starred} onStar=${onStar} sub=${r.tier===99?'depth':'tier '+r.tier}/>
-    <p class="note">${fmtSummary(M.cfg)}. ${r.dp ? 'Drafted pick '+r.dp+' overall.' : 'Draft slot unknown.'}${r.ecrRank ? ` Expert consensus #${r.ecrRank} (${r.pos}${r.ecrPos}), for comparison only.` : ''}</p>
+    <p class="note">${fmtSummary(M.cfg)}. ${r.dp ? 'Drafted pick '+r.dp+' overall.' : 'Draft slot unknown.'}${r.ecrRank ? ` Expert consensus #${r.ecrRank} (${r.pos}${r.ecrPos}), for comparison only.` : ''}${r.pubPos ? ` Public trade market (FantasyCalc): ${r.pos}${r.pubPos}, worth ${fmtV(r.pubV)} on this board's scale.` : ''}</p>
+    ${r.pubFlag ? html`<p class=${'mktnote '+r.pubFlag}>The board and the public market disagree a lot here: board ${r.pos}${r.prank} (${fmtV(r.v)}), market ${r.pos}${r.pubPos} (${fmtV(r.pubV)}). ${r.pubFlag==='above' ? 'Either the market is missing something the stats show, or it knows something they don\'t (role, injury, age): worth a news check before you buy.' : 'The market likes him more than his production does: a sell candidate, unless there\'s news behind it.'}</p>` : null}
     <div class="sec"><span class="eyebrow">Profile</span><div class="charts"><${ValueHistory} r=${r} H=${H}/><${PpgChart} r=${r} M=${M}/><${CareerChart} r=${r}/></div></div>
     <div class="sec"><span class="eyebrow">Situation</span><${RoleVolume} r=${r} M=${M}/><${Situation} r=${r} M=${M} canEdit=${canEdit} onSave=${onOut}/>
     ${r.ath!=null && r.pos!=='WR' ? html`<p class="sub">Athleticism: ${r.ath>=0?'+':''}${fmt(r.ath,1)} SD vs ${r.pos}s at the combine.</p>` : null}
@@ -1502,7 +1519,13 @@ function useSleeper(){
   const save = c => { setConn(c); lsSet('dvb.sleeper', c); };
   const loadLeague = async lid => { setBusy(true); setErr(null);
     try{ const [league, rosters, users, traded] = await Promise.all([slp('league/'+lid), slp('league/'+lid+'/rosters'), slp('league/'+lid+'/users'), slp('league/'+lid+'/traded_picks').catch(()=>[])]);
-      setL({league, rosters, users, traded, at:Date.now()}); return {league, rosters}; }
+      setL({league, rosters, users, traded, at:Date.now()});
+      // the league's own trades: every week of this season and the one before (its previous league id), in the background
+      (async()=>{ const ids = [lid]; if(league.previous_league_id) ids.push(league.previous_league_id); const all = [];
+        for(const id of ids){ const wk = await Promise.all(Array.from({length:18}, (_,i)=>slp(`league/${id}/transactions/${i+1}`).catch(()=>[])));
+          wk.flat().forEach(t=>{ if(t && t.type==='trade' && t.status==='complete') all.push(t); }); }
+        setL(o=>o && o.league.league_id===lid ? {...o, trades:all} : o); })().catch(()=>{});
+      return {league, rosters}; }
     catch(e){ setErr(e.code||'http'); return null; } finally{ setBusy(false); } };
   const findUser = async (name, season) => { setBusy(true); setErr(null);
     try{ const u = await slp('user/'+encodeURIComponent(name.trim())); if(!u || !u.user_id){ setErr('nouser'); return; }
@@ -1540,7 +1563,7 @@ function SleeperPanel({S, M, cfg, setCfg, hasFd, teams, me, setMe}){
 }
 
 // league picture: every team's starting lineup by position, ranked, with your team marked
-function LeagueView({teams, me, M, cfg, mv, onOpen, onStar}){
+function LeagueView({teams, me, M, cfg, mv, lg, mv0, onOpen, onStar}){
   const V = r => r.v, rows = teams.map((t,i)=>{ const l = lineup(t.rows, cfg, V), all = t.rows.reduce((a,r)=>a+r.v,0) + t.picks.reduce((a,p)=>a+p.v,0);
     const age = t.rows.length ? l.used.size ? [...l.used].reduce((a,r)=>a+(r.ageNow||0),0)/l.used.size : 0 : 0; return {t, i, l, all, age}; });
   const rk = {}; ['tot', ...POS].forEach(q=>{ const s = rows.slice().sort((a,b)=>(q==='tot'?b.l.tot-a.l.tot:b.l.by[q]-a.l.by[q])); s.forEach((x,j)=>(rk[x.i]=rk[x.i]||{})[q]=j+1); });
@@ -1552,6 +1575,17 @@ function LeagueView({teams, me, M, cfg, mv, onOpen, onStar}){
       <div class="kv3"><div><span>Starters</span><b class="mono">${ordn(rk[me].tot)} of ${n}</b></div><div><span>All players + picks</span><b class="mono">${ordn(byAll.findIndex(x=>x.i===me)+1)} of ${n}</b></div><div><span>Starters' average age</span><b class="mono">${fmt(mine.age,1)}</b></div></div>
       <p class="note">${dir==='win' ? 'Your starters are among the league\'s best: Win now fits (set it in the trade finder).' : dir==='rebuild' ? 'Your starters rank in the bottom third: Rebuild may fit better, trading producers for youth and picks.' : 'Middle of the pack: Neutral fits unless you want to push in one direction.'}</p>
       <div class="controls"><button class="btn" onClick=${()=>onStar(mine.t.rows.map(r=>r.k))}>Star my roster on the board</button></div></div>` : null}
+    ${lg ? (()=>{ const name = rid => (teams.find(t=>t.rid===rid)||{}).name || 'Team '+rid, star = M.cfg.star, V = r => r.v;
+        const E = (xs, f) => Math.pow(xs.reduce((a,r)=>a+tradeVal(f(r), star), 0), 1/star), recent = lg.trades.slice().sort((a,b)=>b.at-a.at).slice(0, 8);
+        const lab = {QB:'QBs', RB:'RBs', WR:'WRs', TE:'TEs', PK:'draft picks'}, diffs = lg.m ? LG_CLS.map(c=>[c, lg.m[c]]).filter(([,x])=>Math.abs(x-1)>=0.08) : [];
+        return html`<div class="panel"><h2>Your league's market</h2>
+          <p class="sub">${lg.trades.length} trade${lg.trades.length===1?'':'s'} in this league this season and last that the board can value. ${lg.m ? 'The trade tools judge "would they accept" at these prices: FantasyCalc, adjusted to what your leaguemates actually pay.' : 'At least 5 are needed before the tools adjust to your league; until then they use FantasyCalc as it is.'}</p>
+          ${lg.m ? html`<div class="lgm">${LG_CLS.map(c=>html`<div key=${c}><span>${c==='PK'?'Picks':lab[c]}</span><b class="mono">${Math.abs(lg.m[c]-1)<0.005 ? '0%' : (lg.m[c]>1?'+':'−')+fmt(Math.abs(lg.m[c]-1)*100,0)+'%'}</b></div>`)}</div>
+            <p class="note">${diffs.length ? 'Compared with the public market, your league pays '+diffs.map(([c,x])=>`${fmt(Math.abs(x-1)*100,0)}% ${x>1?'more':'less'} for ${lab[c]}`).join(', ')+'.' : 'Your league prices players about the same as the public market.'} Players are valued today, so older trades carry some hindsight.</p>` : null}
+          ${recent.length ? html`<h3>Recent trades</h3><div class="lgtr">${recent.map((t,i)=>{ const bA = E(t.got[0], V), bB = E(t.got[1], V), mA = E(t.got[0], mv0), mB = E(t.got[1], mv0), wb = bA>=bB?0:1, wm = mA>=mB?0:1, gb = Math.abs(bA-bB)/Math.max(bA,bB,1), gm = Math.abs(mA-mB)/Math.max(mA,mB,1);
+            return html`<div class="lgt" key=${i}><div class="lgth"><span class="eyebrow">${new Date(t.at).toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'})}</span></div>
+              ${[0,1].map(s=>html`<div key=${s} class="lgts"><b>${name(t.rids[s])} got</b> ${t.got[s].map(r=>r.n).join(', ')}</div>`)}
+              <p class="note">Board: ${gb<0.05 ? 'even' : name(t.rids[wb])+' won by '+fmt(100*gb,0)+'%'}. Public market: ${gm<0.05 ? 'even' : name(t.rids[wm])+' won by '+fmt(100*gm,0)+'%'}.</p></div>`; })}</div>` : null}</div>`; })() : null}
     <div class="panel"><h2>League value</h2><p class="sub">Every team's players and picks on this board. The darker part of each bar is the starting lineup.</p>
       <div class="lgbars">${byAll.map(x=>html`<div key=${x.t.rid} class=${'lgb'+(x.i===me?' me':'')}><span class="nm">${x.t.name}</span><div class="bar"><i class="all" style=${{width:(100*x.all/mx)+'%'}}></i><i class="st" style=${{width:(100*x.l.tot/mx)+'%'}}></i></div><b class="mono">${fmtV(x.all)}</b></div>`)}</div></div>
     ${mine ? html`<div class="panel"><h2>Your roster</h2><div class="tblwrap"><table><thead><tr><th>Player</th><th>Board</th><th>${mv.label}</th><th>Value</th></tr></thead><tbody>
@@ -1597,11 +1631,11 @@ function Waivers({teams, me, M, cfg, mv, onOpen}){
 }
 function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
   const [res, setRes] = useState(null);
-  const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+mv.src+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v);
+  const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+mv.src+'|'+JSON.stringify(mv.lg||0)+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v);
   useEffect(()=>{ setRes(null); const t = setTimeout(()=>{ try{ setRes({key, list:findTrades(teams, me, M.cfg, mv)}); }catch(e){ console.error(e); setRes({key, list:[]}); } }, 30); return ()=>clearTimeout(t); }, [key]);
   const T = teams[me];
   return html`<div class="panel"><h2>Trade finder</h2>
-      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at ${mv.src==='FantasyCalc' ? 'public trade values (FantasyCalc, from real dynasty trades)' : 'expert-consensus prices'}. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start.</p>
+      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at ${mv.lg ? 'your league\'s prices (FantasyCalc, adjusted by the trades your leaguemates have actually made)' : mv.src==='FantasyCalc' ? 'public trade values (FantasyCalc, from real dynasty trades)' : 'expert-consensus prices'}. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start.</p>
       <div class="fld" style=${{marginTop:12}}><label>Your team's direction<span class="hint">Win now weighs your starting lineup more. Rebuild weighs long-term value and picks, and never suggests getting older: what you take on can't be more than a year older than what you send.</span></label>
         <${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/></div></div>
     ${!res || res.key!==key ? html`<div class="panel empty"><b>Looking through ${teams.length-1} rosters</b><span>Checking a few thousand packages.</span></div>`
@@ -1630,7 +1664,12 @@ function Trade({M, cfg, setCfg, players, slmap, fc, hasFd, onOpen, onStar}){
   const [sideT, setSideT] = useState(()=>lsGet('dvb.tradeTeams', [null, null]));   // which league team each side is (roster ids)
   useEffect(()=>lsSet('dvb.trade', sides), [sides]);
   useEffect(()=>lsSet('dvb.tradeTeams', sideT), [sideT]);
-  const mv = useMemo(()=>M ? marketFn(M, fc, idx) : null, [M, fc, idx]);
+  const mv0 = useMemo(()=>M ? marketFn(M, fc, idx) : null, [M, fc, idx]);
+  // your league's market: the public market adjusted by what your leaguemates actually pay (5+ league trades needed)
+  const lg = useMemo(()=>{ if(!M || !mv0 || !S.L || !S.L.trades) return null; const tr = leagueTrades(S.L, M, idx, Date.now());
+    return {trades:tr, m: tr.length>=5 ? fitLeagueMarket(tr, mv0, M.cfg.star) : null}; }, [M, mv0, S.L, idx]);
+  const mv = useMemo(()=>{ if(!mv0) return null; if(!lg || !lg.m) return mv0; const m = lg.m;
+    const f = r => mv0(r)*(m[r && r.pos==='PK' ? 'PK' : r && r.pos]||1); f.rank = mv0.rank; f.label = mv0.label; f.src = mv0.src+' + your league\'s trades'; f.base = mv0.src; f.lg = m; f.at = mv0.at; f.tep = mv0.tep; return f; }, [mv0, lg]);
   if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The trade tools open once the board has players.</span></div>`;
   const connected = !!teams;
   const view = !connected && tab!=='calc' ? 'calc' : tab;
@@ -1639,10 +1678,43 @@ function Trade({M, cfg, setCfg, players, slmap, fc, hasFd, onOpen, onStar}){
     ${connected ? html`<div class="subtabs"><${Seg} label="Trade tools" value=${view} onChange=${go} opts=${[['find','Trades'],['fa','Waivers'],['calc','Calculator'],['league','League']]}/></div>` : null}
     ${view==='find' ? html`<${Finder} teams=${teams} me=${me} M=${M} cfg=${cfg} setCfg=${setCfg} mv=${mv} onLoad=${loadTrade}/>`
       : view==='fa' ? html`<${Waivers} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} onOpen=${onOpen}/>`
-      : view==='league' ? html`<${LeagueView} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} onOpen=${onOpen} onStar=${onStar}/>`
+      : view==='league' ? html`<${LeagueView} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} lg=${lg} mv0=${mv0} onOpen=${onOpen} onStar=${onStar}/>`
       : html`<${Calc} M=${M} sides=${sides} setSides=${setSides} sideT=${sideT} setSideT=${setSideT} teams=${teams} me=${me} mv=${mv} onOpen=${onOpen}/>`}`;
 }
 
+// ---- Your league's market: what your leaguemates actually pay. Each completed trade in the league (this season and last,
+// recent ones counting most: half-life 90 days) is assumed to have looked fair to both managers. Starting from the public
+// market (FantasyCalc), one price multiplier per kind of asset (QB, RB, WR, TE, draft picks) is fitted so those trades come
+// out as even as possible, pulled toward the public price (a kind of asset needs 3+ trades to move at all), centred so the
+// average kind keeps its public price, and kept within -25%/+33%. Players are valued today, so older trades carry some hindsight.
+const LG_CLS = ['QB','RB','WR','TE','PK'];
+function leagueTrades(L, M, idx, now){
+  if(!L || !L.trades || !L.trades.length) return [];
+  const byK = Object.fromEntries(M.rows.map(r=>[r.k, r])), P = M.picks||[];
+  const pickOf = (season, round) => { const ys = [...new Set(P.filter(p=>p.generic).map(p=>p.yr))].sort((a,b)=>a-b); if(!ys.length) return null;
+    const y = ys.includes(+season) ? +season : ys.reduce((a,b)=>Math.abs(b-season)<Math.abs(a-season)?b:a); return P.find(p=>p.generic && p.yr===y && p.rd===Math.min(PICK_ROUNDS, +round)) || null; };
+  return L.trades.map(t=>{ const side = {};
+    Object.entries(t.adds||{}).forEach(([pid, rid])=>{ const r = byK[idx[pid]]; if(r) (side[rid]=side[rid]||[]).push(r); });
+    (t.draft_picks||[]).forEach(d=>{ const p = pickOf(d.season, d.round); if(p) (side[d.owner_id]=side[d.owner_id]||[]).push({...p, n:`${d.season} round ${d.round}`}); });
+    const rids = Object.keys(side); if(rids.length!==2) return null;
+    return {at:t.status_updated||t.created||0, rids:rids.map(Number), got:rids.map(k=>side[k]), w:Math.pow(0.5, Math.max(0, now-(t.status_updated||t.created||now))/(90*864e5))}; }).filter(Boolean);
+}
+function fitLeagueMarket(trades, mv, star){
+  const cls = r => r.pos==='PK' ? 'PK' : r.pos, E = (xs, m) => Math.pow(xs.reduce((a,r)=>a+tradeVal(mv(r)*m[cls(r)], star), 0), 1/star);
+  // how many trades each kind of asset appears in; a kind needs 3 before it can move off the public price
+  const n = {}; trades.forEach(t=>new Set(t.got.flat().map(cls)).forEach(c=>n[c]=(n[c]||0)+1));
+  const free = LG_CLS.filter(c=>(n[c]||0)>=3);
+  const loss = m => trades.reduce((a,t)=>{ const A = E(t.got[0], m), B = E(t.got[1], m); return a + (A>0 && B>0 ? t.w*Math.pow(Math.log(A/B), 2) : 0); }, 0)
+    + LG_PRIOR*LG_CLS.reduce((a,c)=>a+Math.pow(Math.log(m[c]), 2), 0);   // the pull toward the public market
+  const m = Object.fromEntries(LG_CLS.map(c=>[c,1]));
+  for(let it=0; it<6; it++) for(const c of free){ let best = m[c], bl = loss(m);
+    for(let s=LG_LIM[0]; s<=LG_LIM[1]+1e-9; s+=0.01){ m[c] = s; const l = loss(m); if(l < bl-1e-12){ bl = l; best = s; } } m[c] = best; }
+  // only relative prices matter in a trade, so centre them: the average kind of asset keeps its public price
+  const g = free.length ? Math.exp(free.reduce((a,c)=>a+Math.log(m[c])*(n[c]||0),0)/free.reduce((a,c)=>a+(n[c]||0),0)) : 1;
+  free.forEach(c=>m[c] = Math.max(LG_LIM[0], Math.min(LG_LIM[1], m[c]/g)));
+  return m;
+}
+const LG_PRIOR = 4, LG_LIM = [0.75, 1.33];
 // ---- Trade calculator: totals with the star premium, then the detail: each player's numbers, value season by season,
 // board against market, and (with a league connected) what it does to both starting lineups.
 function pickShape(M){ const S = M.season, P = M.rows.filter(r=>r.dy===S && r.v>1 && r.st && r.st.yrs && r.st.yrs.length);
@@ -1699,7 +1771,7 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
         <div class="ybars">${yr[0].map((_,j)=>html`<div key=${j} class="yb"><div class="yp">${[0,1].map(i=>html`<i key=${i} class=${'s'+i} style=${{height:(100*yr[i][j]/ymx)+'%'}} title=${fmt(yr[i][j])}></i>`)}</div><span>${"'"+String(M.season+j).slice(2)}</span></div>`)}</div>
         <div class="legend"><span><i class="s0"></i>${lab(0)}</span><span><i class="s1"></i>${lab(1)}</span></div>
         <p class="note">Next two seasons: ${fmt(soon[0])} vs ${fmt(soon[1])}. After that: ${fmt(later[0])} vs ${fmt(later[1])}. ${(soon[0]>soon[1]) !== (later[0]>later[1]) ? `${lab(soon[0]>soon[1]?0:1)} holds more value in the next two seasons; ${lab(soon[0]>soon[1]?1:0).replace(/^W/,'w')} holds more after that.` : ''}</p></div>
-      <div class="panel"><h3 style=${{marginTop:0}}>Board vs market</h3><p class="note">The board's value against what ${mv.src==='FantasyCalc' ? 'the public trade market (FantasyCalc) pays'+(mv.tep ? '; its values have no TE premium' : '') : 'expert consensus would pay'}. A side the market rates higher than the board is a good one to send.</p>
+      <div class="panel"><h3 style=${{marginTop:0}}>Board vs market</h3><p class="note">The board's value against what ${mv.lg ? 'your league pays (FantasyCalc adjusted by your league\'s own trades)' : mv.src==='FantasyCalc' ? 'the public trade market (FantasyCalc) pays'+(mv.tep ? '; its values have no TE premium' : '') : 'expert consensus would pay'}. A side the market rates higher than the board is a good one to send.</p>
         ${[0,1].map(i=>{ const m2 = Math.max(E[0],E[1],EM[0],EM[1])||1; return html`<div key=${i} class="bvm"><b>${lab(i)}</b>
           <div class="bvr"><span>Board</span><div class="bar"><i class=${'s'+i} style=${{width:(100*E[i]/m2)+'%'}}></i></div><span class="mono">${fmt(E[i])}</span></div>
           <div class="bvr"><span>Market</span><div class="bar"><i class=${'s'+i+' mk'} style=${{width:(100*EM[i]/m2)+'%'}}></i></div><span class="mono">${fmt(EM[i])}</span></div></div>`; })}
@@ -2040,6 +2112,14 @@ function App(){
     }
     return m;
   }, [players, JSON.stringify(cfg), D.adj, D.meta, D.classes, D.comps]);
+  // public market (FantasyCalc, real trades) beside each player: his position rank there, its value on this board's scale,
+  // and a flag where the two disagree a lot (a second look, never a change to his value)
+  const slIdx = useMemo(()=>slIndex(players, D.slmap), [players, D.slmap]);
+  useMemo(()=>{ if(!M || !D.fc || M.redraft) return; const mv = marketFn(M, D.fc, slIdx); if(mv.src!=='FantasyCalc') return;
+    M.rows.forEach(r=>{ const pp = mv.rank(r); r.pubPos = pp; r.pubV = pp ? mv(r) : null; r.pubGap = pp ? r.v - r.pubV : null;
+      const big = pp && (r.prank<=({QB:36,RB:60,WR:80,TE:30})[r.pos] || pp<=({QB:36,RB:60,WR:80,TE:30})[r.pos]);
+      r.pubFlag = big && Math.abs(Math.log(r.prank/pp)) >= Math.log(1.75) && Math.abs(r.pubGap) >= Math.max(15, 0.3*Math.max(r.v, r.pubV)) ? (r.pubGap>0 ? 'above' : 'below') : null; });
+    M.pubAt = D.fc.at; }, [M, D.fc, slIdx]);
 
   const saveAdj = async (k, v) => { const db = dbRef.current; if(!db) return; const rows = {...((D.adj&&D.adj.rows)||{})}; if(v) rows[k]=v; else delete rows[k]; await db.doc('board/adj').set({rows}); setOpen(null); };
   const saveInj = async (k, g, note) => { const db = dbRef.current; if(!db) return; const rows = {...((D.injuries&&D.injuries.rows)||{})}; if(g) rows[k] = {games:g, at:Date.now(), note, auto:false}; else delete rows[k]; await db.doc('board/injuries').set({rows}); };
