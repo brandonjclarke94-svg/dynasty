@@ -803,7 +803,7 @@ function rankAll(players, cfgIn, now, adj){
   // comparable players: move each player toward where his comps rank him (see COMPW), on the formula's own value ladder
   const pools = compLib(c.__comps);
   if(pools){ const fe = compFeats(out, S, gS);
-    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p*(r.sitF!=null ? r.sitF : 1); r.cNear = res.near.map(([d,e,w])=>({...e, d, w})); r.cRef = {...fe.ref(r), RY:pools.R}; });
+    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; if(r.p && r.p.pro) return; /* college prospects: no NFL record to match */ /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p*(r.sitF!=null ? r.sitF : 1); r.cNear = res.near.map(([d,e,w])=>({...e, d, w})); r.cRef = {...fe.ref(r), RY:pools.R}; });
     const rows = out.filter(r=>r.c!=null && (r.base>0 || r.c>0)).map(r=>({r, pos:r.pos, v:r.base, c:r.c}));
     compBlend(rows);
     rows.forEach(x=>{ const r=x.r; if(x.vBlend==null) return; const f = r.base>0 ? x.vBlend/r.base : 1;
@@ -986,7 +986,7 @@ function Row({r, top, onOpen, posView, mv, eg, star}){
 }
 
 const AGES = [['all','Any age'],['u24','24 & under'],['25-28','25–28'],['29+','29+']];
-function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine}){
+function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine, pro, needPro}){
   const red = cfg.league==='redraft';
   const [pos, setPos] = useState(()=>lsGet('dvb.pos','ALL'));
   const [sort, setSort] = useState('rank');
@@ -999,7 +999,7 @@ function Board({M, status, onOpen, cfg, setCfg, classes, canEdit, onClass, mine}
   if(pos==='PK' && red){ setTimeout(()=>setPos('ALL'),0); }
   const posOpts = [['ALL','All'],['QB','QB'],['RB','RB'],['WR','WR'],['TE','TE'], ...(red?[]:[['PK','Picks']]), ['MINE','★ Mine']];
   const modeBar = html`<div class="controls"><${Seg} label="League type" value=${cfg.league||'dynasty'} onChange=${v=>setCfg({...cfg, league:v})} opts=${[['dynasty','Dynasty'],['redraft','Redraft']]}/>${red ? null : html`<${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/>`}</div>`;
-  if(pos==='PK' && !red) return html`<div class="toolbar">${modeBar}<div class="controls"><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${posOpts}/></div></div><${Picks} M=${M} classes=${classes} canEdit=${canEdit} onClass=${onClass}/>`;
+  if(pos==='PK' && !red) return html`<div class="toolbar">${modeBar}<div class="controls"><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${posOpts}/></div></div><${Picks} M=${M} classes=${classes} canEdit=${canEdit} onClass=${onClass} pro=${pro} needPro=${needPro}/>`;
   const posView = pos!=='ALL' && pos!=='MINE', qq = normName(q);
   const mineR = r => posView ? r.prank : r.rank, ecrR = r => posView ? r.ecrPos : r.ecrRank;
   const isMine = pos==='MINE';
@@ -1113,7 +1113,8 @@ function Dashboard({M, D, cfg, mine, onOpen, go}){
     </div>`;
 }
 
-function Picks({M, classes, canEdit, onClass}){
+function Picks({M, classes, canEdit, onClass, pro, needPro}){
+  useEffect(()=>{ needPro && needPro(); }, []);
   const P = M.picks || [];
   if(!P.length) return html`<div class="panel empty"><b>No pick values yet</b><span>Pick values come from the last two rookie classes, which haven't loaded.</span></div>`;
   const top = M.rows[0].v, Y = P[0].yr;
@@ -1128,7 +1129,17 @@ function Picks({M, classes, canEdit, onClass}){
       <div style=${{display:'grid',gap:6}}><div><b>${y} class</b> <span class="sub">${why[y] || 'No strong read yet, so it counts as average.'}</span></div>
       ${canEdit ? html`<${Seg} label=${y+' class strength'} value=${l} onChange=${v=>onClass(y, v)} opts=${[['weak','Weak'],['average','Avg'],['strong','Strong'],['loaded','Loaded']]}/>` : html`<span class="chip">${CLASS_LEVELS[l].label}</span>`}</div></div>`; })}
   </div>`;
-  return html`${classPanel}<p class="note">A pick is worth the player it usually becomes on this board: the last two rookie classes (${M.season} and ${M.season-1}) are lined up best to worst in your format, smoothed, and pulled a little toward each round's average. Future picks use the round average, minus 10% a year. Values move with your format and with how those rookies play.</p>
+  // the next class: college prospects valued like a rookie drafted at his projected NFL slot (no NFL record yet)
+  const proPanel = !pro ? null : pro.busy ? html`<div class="panel"><h2>${pro.year} class</h2><p class="sub">Valuing the ${pro.year} prospects…</p></div>` : (()=>{
+    const L = CLASS_LEVELS, sug = pro.ratio==null ? null : pro.ratio>=1.2 ? 'loaded' : pro.ratio>=1.06 ? 'strong' : pro.ratio<=0.88 ? 'weak' : 'average', cur = C[pro.year]||'average';
+    return html`<div class="panel"><h2>${pro.year} class</h2>
+      <p class="sub">The top college prospects at QB, RB, WR and TE, each valued like a rookie drafted at his projected NFL pick, in your format. ${pro.src} Projections move a lot before April; a prospect who stays in school drops off.</p>
+      ${pro.ratio!=null ? html`<p class="note" style=${{marginTop:8}}>Its top ${pro.n} are worth ${fmt(100*pro.ratio,0)}% of the ${M.season} class's top ${pro.n} (valued the same way: draft slot only, at the age they were drafted). That reads as <b>${L[sug].label}</b>${sug!==cur ? `; the ${pro.year} picks are currently set to ${L[cur].label}` : ''}.${canEdit && sug!==cur ? html` <button class="lnk" onClick=${()=>onClass(pro.year, sug)}>Set ${pro.year} to ${L[sug].label}</button>` : ''}</p>` : null}
+      <div class="tblwrap"><table><thead><tr><th>Prospect</th><th>Pick</th><th>Value</th><th>Like #</th></tr></thead><tbody>
+      ${pro.rows.map(r=>html`<tr key=${r.n}><td class="nm"><${PosTag} p=${r.pos}/> ${r.n}<small class="fasub">${r.school}</small></td><td>${r.pick}</td><td>${fmtV(r.v)}</td><td>${r.like}</td></tr>`)}
+      </tbody></table></div>
+      <p class="note">Pick = projected NFL draft pick. "Like #" = where that value would rank on today's overall board.</p></div>`; })();
+  return html`${classPanel}${proPanel}<p class="note">A pick is worth the player it usually becomes on this board: the last two rookie classes (${M.season} and ${M.season-1}) are lined up best to worst in your format, smoothed, and pulled a little toward each round's average. Future picks use the round average, minus 10% a year. Values move with your format and with how those rookies play.</p>
     <div class="board">${groups.map(g=>html`<div class="tbl" key=${g.label}><div class="tier"><b>${g.label}</b></div><div class="rowgrp">${g.rows.map(p=>{ const nb = near(p); return html`<div class="row" key=${p.k}>
       <span class="rk" style=${{fontSize:16}}>${p.generic ? p.rd+(['st','nd','rd','th'][p.rd-1]) : p.rd+'.'+String(p.slot).padStart(2,'0')}</span>
       <span style=${{minWidth:0}}><div class="nm">${p.n}</div><div class="meta"><span>about the same as ${nb ? nb.n+' (#'+nb.rank+')' : '–'}</span></div></span>
@@ -2074,7 +2085,7 @@ function App(){
           const r = await fetch('data.json', {cache:'no-store'}); if(!r.ok) throw new Error('no data');
           const d = await r.json(), o = {};
           ['meta','adj','defaults','classes','injuries','outlook',...POS].forEach(k=>{ o[k] = d[k]||null; o['_'+k] = true; });
-          if(d.ecr0) o.ecr0 = d.ecr0; if(d.slmap) o.slmap = d.slmap;
+          if(d.ecr0) o.ecr0 = d.ecr0; if(d.slmap) o.slmap = d.slmap; if(d.prospects) o.prospects = d.prospects;
           fetch('fc.json').then(x=>x.ok?x.json():null).then(f=>{ if(f && f.v && alive) setD(o2=>({...o2, fc:f})); }).catch(()=>{});   // public trade values (FantasyCalc), refreshed daily
           setD(o);
           fetch('comps.json').then(x=>x.ok?x.json():null).then(c=>{ if(c && c.v===2 && alive) setD(o2=>({...o2, comps:c})); }).catch(()=>{});
@@ -2085,6 +2096,7 @@ function App(){
         unsubs.push(db.doc('board/'+k).onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; setD(o=>({...o, [k]:d, ['_'+k]:true})); }, ()=>{}));
       });
       unsubs.push(db.doc('board/fc').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d && d.v) setD(o=>({...o, fc:d})); }, ()=>{}));   // public trade values (FantasyCalc)
+      unsubs.push(db.doc('board/prospects').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d && d.rows) setD(o=>({...o, prospects:d})); }, ()=>{}));   // next year's college prospects
       unsubs.push(db.doc('board/slmap').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d) setD(o=>({...o, slmap:d})); }, ()=>{}));   // Sleeper ids (older boards)
       unsubs.push(db.doc('board/ecr0').onSnapshot(snap=>{ const d = snap.exists ? snap.data() : null; if(d) setD(o=>({...o, ecr0:d})); }, ()=>{}));   // optional: report card
       // comparable-players library, stored in four parts (optional: the board works without it)
@@ -2136,6 +2148,25 @@ function App(){
       r.pubFlag = big && Math.abs(Math.log(r.prank/pp)) >= Math.log(1.75) && Math.abs(r.pubGap) >= Math.max(15, 0.3*Math.max(r.v, r.pubV)) ? (r.pubGap>0 ? 'above' : 'below') : null; });
     M.pubAt = D.fc.at; }, [M, D.fc, slIdx]);
 
+  // next year's college prospects (board/prospects): valued by a second run of the board with them added as rookies who
+  // haven't played, rescaled to today's board; the last class is valued the same way at zero games for a like-for-like ratio
+  const [wantPro, setWantPro] = useState(false), [pro, setPro] = useState(null);
+  const proKey = M && D.prospects ? JSON.stringify(cfg)+'|'+(D.meta&&D.meta.at)+'|'+(D.prospects.at||D.prospects.year)+'|'+(D.comps?1:0) : '';
+  useEffect(()=>{ if(!wantPro || !proKey || (pro && pro.key===proKey)) return; setPro({key:proKey, busy:true, year:D.prospects.year});
+    const t = setTimeout(()=>{ try{
+      const Y = D.prospects.year, ad = Date.now(), pros = (D.prospects.rows||[]).filter(x=>POS.includes(x.pos)).map(x=>({k:'pro_'+normName(x.n), n:x.n, pos:x.pos, team:String(Y), age:x.age-((new Date(Y,8,1)-ad)/(365.25*864e5)), ad, dp:x.pick, dy:Y, s:{}, pro:1, school:x.school}));
+      // last class as it stood before its first game: same players, no NFL record
+      const yr = 365.25*864e5, sept = y => new Date(y,8,1).getTime();
+      const last = players.filter(p=>p.dy===M.season && p.dp).map(p=>({...p, k:'was_'+p.k, s:{}, pro:1, inj:null, ovr:null, rep:null, out:null, comp:null, team:String(Y), dy:Y, ad,
+        age:(p.age - ((p.ad||ad) - sept(M.season))/yr) - (sept(Y) - ad)/yr}));   // as a prospect a year on, at the age he was at his own draft
+      const run = rankAll([...players, ...pros, ...last], {...cfg, __class:(D.classes&&D.classes.years)||{}, __comps:D.comps||null}, now, (D.adj&&D.adj.rows)||{});
+      const byNow = Object.fromEntries(M.rows.map(r=>[r.k, r.v])), rat = run.rows.filter(r=>byNow[r.k]>50).map(r=>byNow[r.k]/r.v).sort((a,b)=>a-b), f = rat.length ? rat[rat.length>>1] : 1;
+      const src = Object.fromEntries(pros.map(p=>[p.k, p])), rows = run.rows.filter(r=>src[r.k]).map(r=>{ const v = r.v*f; return {n:r.n, pos:r.pos, school:src[r.k].school, pick:src[r.k].dp, v, like:M.rows.filter(x=>x.v>v).length+1}; }).sort((a,b)=>b.v-a.v);
+      const lastV = run.rows.filter(r=>r.k.startsWith('was_')).map(r=>r.v*f).sort((a,b)=>b-a), n = Math.min(12, rows.length, lastV.length);
+      const ratio = n>=6 ? rows.slice(0,n).reduce((a,r)=>a+r.v,0)/lastV.slice(0,n).reduce((a,v)=>a+v,0) : null;
+      setPro({key:proKey, year:Y, rows, ratio, n, src:D.prospects.src||''});
+    }catch(e){ console.error(e); setPro({key:proKey, year:D.prospects.year, rows:[], ratio:null, n:0, src:''}); } }, 50);
+    return ()=>clearTimeout(t); }, [wantPro, proKey]);
   const saveAdj = async (k, v) => { const db = dbRef.current; if(!db) return; const rows = {...((D.adj&&D.adj.rows)||{})}; if(v) rows[k]=v; else delete rows[k]; await db.doc('board/adj').set({rows}); setOpen(null); };
   const saveInj = async (k, g, note) => { const db = dbRef.current; if(!db) return; const rows = {...((D.injuries&&D.injuries.rows)||{})}; if(g) rows[k] = {games:g, at:Date.now(), note, auto:false}; else delete rows[k]; await db.doc('board/injuries').set({rows}); };
   const saveOut = async (k, f, note) => { const db = dbRef.current; if(!db) return; const rows = {...((D.outlook&&D.outlook.rows)||{})}; if(f) rows[k] = {f, note, at:Date.now(), auto:false}; else delete rows[k]; await db.doc('board/outlook').set({rows}); };
@@ -2163,7 +2194,7 @@ function App(){
       ${loaded && (view==='format'||view==='method') ? html`<div class="moreseg"><${Seg} label="More" value=${view} onChange=${go} opts=${[['format','Format'],['method','Method']]}/></div>` : null}
       ${!loaded ? html`<div class="panel empty"><b>Loading the board</b><span>Fetching the latest values.</span></div>`
         : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
-        : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine}/>`
+        : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine} pro=${D.prospects ? (pro && pro.key===proKey ? pro : {busy:true, year:D.prospects.year}) : null} needPro=${()=>setWantPro(true)}/>`
         : view==='chart' ? html`<${Chart} M=${M} mine=${mine} onOpen=${r=>setOpen(r.k)}/>`
         : view==='trade' ? html`<${Trade} M=${M} cfg=${cfg} setCfg=${setCfg} players=${players} slmap=${D.slmap||null} fc=${D.fc||null} H=${hist && hist.key===histKey ? hist.H : null} needH=${()=>setWantHist(true)} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))} onOpen=${r=>setOpen(r.k)} onStar=${keys=>{ const s = new Set(keys); setMine(s); lsSet('dvb.mine', [...s]); }}/>`
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
