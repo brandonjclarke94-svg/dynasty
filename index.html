@@ -1439,6 +1439,7 @@ function findTrades(teams, me, c, mv){
   const pool = t => [...t.rows, ...t.picks].filter(r=>r.v>=2).sort((a,b)=>b.v-a.v).slice(0, 22);
   const combos = A => { const o = A.map(x=>[x]); for(let i=0;i<A.length;i++) for(let j=i+1;j<A.length;j++) o.push([A[i], A[j]]); return o; };
   const T = teams[me], myBase = lineup(T.rows, c, V), A = combos(pool(T)), out = [];
+  const wAge = xs => { const w = xs.reduce((a,r)=>a+r.v,0); return w>0 ? xs.reduce((a,r)=>a+r.v*(r.pos==='PK' ? 21 : (r.ageNow||25)),0)/w : 25; };
   // positional fit: each team's starters at each position, ranked across the league (you on the board, them at market prices).
   // A team only takes on a position it isn't sending back if it isn't already loaded there (top third) and the new player starts.
   const nT = teams.length, top = Math.ceil(nT/3), pr = val => { const L = teams.map(t=>lineup(t.rows, c, val).by), R = teams.map(()=>({}));
@@ -1456,6 +1457,9 @@ function findTrades(teams, me, c, mv){
       if(theirMk + 0.5*theirLine < -0.03*pkg) continue;
       if(theirLine < -0.5 && theirMk < 0.05*pkg) continue;   // weakening his starting lineup needs a clear market win to sell
       if(!fits(get, give, rkMe, mine2) || !fits(give, get, rkMk[ti], their2)) continue;
+      // Rebuild: never get older. The package you take on can't be more than a year older (value-weighted; a pick counts as
+      // a 21-year-old) than the one you send, whatever the board says about the next few seasons.
+      if(c.mode==='rebuild' && wAge(get) > wAge(give) + 1) continue;
       if(theirMk > 0.25*Math.max(gM, rM)) continue;   // overpaying at market prices: your side could fetch more elsewhere
       const score = myGain + lam*myLine - 0.5*Math.max(0, theirMk - 0.08*Math.max(gM, rM)); if(score < 0.04*pkg || myGain + myLine <= 0) continue;
       out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by], rkMe, rkThem:rkMk[ti], nT}); } });
@@ -1578,7 +1582,7 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
   const T = teams[me];
   return html`<div class="panel"><h2>Trade finder</h2>
       <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at ${mv.src==='FantasyCalc' ? 'public trade values (FantasyCalc, from real dynasty trades)' : 'expert-consensus prices'}. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start.</p>
-      <div class="fld" style=${{marginTop:12}}><label>Your team's direction<span class="hint">Win now weighs your starting lineup more; rebuild weighs long-term value and picks.</span></label>
+      <div class="fld" style=${{marginTop:12}}><label>Your team's direction<span class="hint">Win now weighs your starting lineup more. Rebuild weighs long-term value and picks, and never suggests getting older: what you take on can't be more than a year older than what you send.</span></label>
         <${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/></div></div>
     ${!res || res.key!==key ? html`<div class="panel empty"><b>Looking through ${teams.length-1} rosters</b><span>Checking a few thousand packages.</span></div>`
       : !res.list.length ? html`<div class="panel empty"><b>No clear wins right now</b><span>Nothing passed both tests: better for you on this board and fair to them at market prices. Try another team direction.</span></div>`
