@@ -5,14 +5,25 @@ Usage: python3 make_site.py <page.html | -> <dir with board/*.json from Artifact
 import json, os, sys
 page, dbdir, site = sys.argv[1], sys.argv[2], sys.argv[3]
 os.makedirs(site, exist_ok=True)
+import hashlib
 if page != '-':
   body = open(page, encoding='utf-8').read()
+  # Guard: index.html may have been edited directly (e.g. a redesign merged on GitHub). Refuse to overwrite a page whose
+  # body isn't the one this script last wrote, unless --force; fold such edits into the source page first.
+  import hashlib
+  ip, hp = os.path.join(site, 'index.html'), os.path.join(site, '.page_hash')
+  if os.path.exists(ip) and os.path.exists(hp) and '--force' not in sys.argv:
+    cur = open(ip, encoding='utf-8').read(); i = cur.find('</head><body>'); j = cur.rfind('</body></html>')
+    curb = cur[i+len('</head><body>'):j] if i >= 0 and j >= 0 else cur
+    if hashlib.sha256(curb.encode()).hexdigest() != open(hp).read().strip():
+      raise SystemExit('index.html was changed outside make_site.py (e.g. a redesign). Merge those changes into the page source first, or pass --force.')
   html = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         '<meta name="description" content="Dynasty fantasy football rankings built from real game logs: values for any league format, picks, trade calculator.">'
         '<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>'
         '</head><body>' + body + '</body></html>')
   open(os.path.join(site, 'index.html'), 'w', encoding='utf-8').write(html)
+  open(os.path.join(site, '.page_hash'), 'w').write(hashlib.sha256(body.encode()).hexdigest())
 data = {}
 for k in ['QB', 'RB', 'WR', 'TE', 'meta', 'adj', 'defaults', 'classes', 'injuries', 'outlook', 'ecr0', 'slmap']:
     p = os.path.join(dbdir, k + '.json')
