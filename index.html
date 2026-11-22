@@ -848,17 +848,21 @@ function rankAll(players, cfgIn, now, adj){
         const f = nb/r.base; r.base = nb; r.v *= f; r.st = {...r.st, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})), cal:f}; }); });
     const tot = [...out].sort((a,b)=>b.v-a.v).slice(0,200).reduce((a,r)=>a+r.v,0), f = tot>0 ? LEVEL/tot : 1;
     out.forEach(r=>{ r.v*=f; r.base*=f; r.st = {...r.st, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})), cal:(r.st.cal||1)*f}; }); }
-  // Expert blend (Nov 22 2026). Across all positions, expert consensus has ordered players better than the board over the next
-  // two seasons (2020-24 backtest: board 0.60, 50% blend 0.66, experts alone 0.68): they see landing spots, depth charts and
-  // coaching the game logs can't. Each player's overall board rank is blended with his expert rank (log ranks, weight ecrw),
-  // and the board's own value ladder is handed out in the blended order, so values stay in your format's scale.
+  // Expert blend (Nov 22 2026), within each position. Expert consensus (FantasyPros, a consensus of many rankers) orders players
+  // better than the board's game logs alone: it sees landing spots, depth charts and coaching. But its rankings are built for
+  // one scoring system (superflex or 1QB, PPR, no TE premium), so only its order WITHIN a position is used: each player's
+  // position rank on the board is blended with his expert position rank (log ranks, weight ecrw), and the board's own value
+  // ladder for that position, which is in your scoring, is handed out in the blended order. How positions compare stays the
+  // board's. Backtest (2020-24, next two seasons, all positions together): board 0.60, 50% 0.65, 75% 0.66 (blending the
+  // experts' cross-position order too scored a little higher, 0.66-0.68, but only in the one format it was built for).
   // Players experts don't rank keep their values.
   const ew = c.ecrw!=null ? +c.ecrw : 0.5, em = (c.sf || c.qb>=2) ? 0 : 1;
-  if(ew>0){ const P = out.filter(r=>r.ecr && r.ecr[em] && r.v>0);
-    if(P.length>=50){ const ladder = P.map(r=>r.v).sort((a,b)=>b-a), byV = [...P].sort((a,b)=>b.v-a.v), bR = new Map(byV.map((r,i)=>[r,i+1]));
-      const byE = [...P].sort((a,b)=>a.ecr[em]-b.ecr[em]), eR = new Map(byE.map((r,i)=>[r,i+1]));
-      const sc = r => (1-ew)*Math.log(bR.get(r)) + ew*Math.log(eR.get(r));
-      [...P].sort((a,b)=>sc(a)-sc(b)).forEach((r,i)=>{ const nb = ladder[i], f = r.v>0 ? nb/r.v : 1; r.st = {...r.st, ecrB:{before:r.v, after:nb, bRank:bR.get(r), eRank:eR.get(r), w:ew}, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f}))}; r.v = nb; r.base *= f; }); } }
+  if(ew>0) POS.forEach(q=>{ const P = out.filter(r=>r.pos===q && r.ecr && r.ecr[em] && r.v>0); if(P.length<12) return;
+    const byV = [...P].sort((a,b)=>b.v-a.v), ladder = byV.map(r=>r.v), bR = new Map(byV.map((r,i)=>[r,i+1]));
+    const eR = new Map([...P].sort((a,b)=>a.ecr[em]-b.ecr[em]).map((r,i)=>[r,i+1]));
+    const sc = r => (1-ew)*Math.log(bR.get(r)) + ew*Math.log(eR.get(r));
+    [...P].sort((a,b)=>sc(a)-sc(b)).forEach((r,i)=>{ const nb = ladder[i], f = r.v>0 ? nb/r.v : 1;
+      r.st = {...r.st, ecrB:{before:r.v, after:nb, bRank:bR.get(r), eRank:eR.get(r), w:ew}, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f}))}; r.v = nb; r.base *= f; }); });
   return finishBoard(out, c, cfgIn, R, N, S, now, {});
 }
 function finishBoard(out, c, cfgIn, R, N, S, now, extra){
@@ -1419,7 +1423,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
       ${st.una ? html`<p class="sub" style=${{marginTop:8}}>Not on an NFL roster this season: his expected scoring is marked down ${fmt(100*st.una,0)}%. He can still sign somewhere, so some value stays.</p>` : null}
       ${st.idle ? html`<p class="sub" style=${{marginTop:8}}>Healthy but no games this season: his expected scoring is marked down ${fmt(100*st.idle,0)}%, the same way a rookie who hasn't taken a snap is.</p>` : null}
       ${st.inj ? html`<p class="sub" style=${{marginTop:8}}>Currently ${r.inj}: value marked down ${fmt(100*st.inj,0)}%.</p>` : null}
-      ${st.ecrB && Math.abs(st.ecrB.after-st.ecrB.before)>0.5 ? html`<p class="sub" style=${{marginTop:8}}>Expert blend (${fmt(100*st.ecrB.w,0)}%): board #${st.ecrB.bRank} and experts #${st.ecrB.eRank} among ranked players, so his value moves from ${fmtV(st.ecrB.before)} to ${fmtV(st.ecrB.after)} (Format tab to change).</p>` : null}
+      ${st.ecrB && Math.abs(st.ecrB.after-st.ecrB.before)>0.5 ? html`<p class="sub" style=${{marginTop:8}}>Expert blend (${fmt(100*st.ecrB.w,0)}%): board ${r.pos}${st.ecrB.bRank} and experts ${r.pos}${st.ecrB.eRank} among ranked ${r.pos}s, so his value moves from ${fmtV(st.ecrB.before)} to ${fmtV(st.ecrB.after)} (Format tab to change).</p>` : null}
       ${st.cal && Math.abs(st.cal-1)>0.05 ? html`<p class="sub" style=${{marginTop:8}}>Cross-position calibration: ×${fmt(st.cal,2)}. Over 2012–21, ${r.pos}s valued like him ${st.cal>1?'produced more':'produced less'} than the board's raw number said, compared with other positions (Format tab to switch off).</p>` : null}
       ${st.lost ? html`<p class="sub" style=${{marginTop:8}}>Lost season: a ${r.pos} below starter level who misses nearly all of a season tends to lose his spot for good, so he's marked down another ${fmt(100*st.lost,0)}% (backtested on 2012–22).</p>` : null}
       ${st.miss && st.ovr ? html`<p class="sub" style=${{marginTop:8}}>Injury news: out about ${fmt(st.miss,0)} more games${st.ovr.note?' ('+st.ovr.note+')':''}, so value is marked down ${fmt(100*(1-st.missF),1)}%. A few missed games barely touch a dynasty value.</p>` : null}
@@ -1872,7 +1876,7 @@ function FormatView({cfg, setCfg, def, canEdit, onSaveDef, hasFd}){
       <${F_} label="Draft capital weight" hint="Raise to trust draft slot more for young players with thin production."><${Seg} label="Draft capital weight" value=${cfg.dcw} onChange=${v=>set('dcw',v)} opts=${[[1,'1×'],[1.5,'1.5×'],[2,'2×'],[3,'3×']]}/></${F_}>
       <${F_} label="Athleticism" hint="Combine athleticism nudges draft slot for young players, only as much as it has predicted fantasy output beyond draft slot: TEs most, RBs and QBs a little, WRs not at all."><${Seg} label="Athleticism" value=${cfg.athw!=null?cfg.athw:1} onChange=${v=>set('athw',v)} opts=${[[0,'Off'],[1,'Data-backed'],[2,'Double']]}/></${F_}>
       <${F_} label="Upside" hint="How much an uncertain future is worth. High lifts young players, short track records and players near replacement, who have the most room to boom; proven stars barely move. Low trusts the averages."><${Seg} label="Upside" value=${cfg.upside} onChange=${v=>set('upside',v)} opts=${[[0.75,'Low'],[1,'Normal'],[1.5,'High']]}/></${F_}>
-      <${F_} label="Expert blend" hint="Blends each player's overall board rank with expert consensus, then hands out the board's values in that order. Backtested (2020-24, all positions together, next two seasons): board alone 0.60, 25% 0.64, 50% 0.66, 75% 0.68. Experts see landing spots, depth charts and coaching the stats can't. Lower it to keep more of the board's own view."><${Seg} label="Expert blend" value=${cfg.ecrw!=null?cfg.ecrw:0.5} onChange=${v=>set('ecrw',v)} opts=${[[0,'Off'],[0.25,'25%'],[0.5,'50%'],[0.75,'75%']]}/></${F_}>
+      <${F_} label="Expert blend" hint="Blends each player's position rank with expert consensus (FantasyPros), then hands out the board's values for that position in the blended order. Only the experts' order within a position is used, because their rankings are built for one scoring system; how positions compare stays in your scoring. Backtested (2020-24, all positions together, next two seasons): board alone 0.60, 25% 0.63, 50% 0.65, 75% 0.66."><${Seg} label="Expert blend" value=${cfg.ecrw!=null?cfg.ecrw:0.5} onChange=${v=>set('ecrw',v)} opts=${[[0,'Off'],[0.25,'25%'],[0.5,'50%'],[0.75,'75%']]}/></${F_}>
       <${F_} label="Cross-position calibration" hint="Deep and mid values are mapped onto what players at that value actually produced over the next four seasons, so a value means the same at every position: backup QBs in superflex and young TEs up, RB/WR lottery tickets down. The top of the board and the order within each position are unchanged. Backtested: overall order across positions much more accurate."><${Seg} label="Cross-position calibration" value=${cfg.calib!=null?cfg.calib:1} onChange=${v=>set('calib',v)} opts=${[[1,'On'],[0,'Off']]}/></${F_}>
       <${F_} label="Star premium" hint="Trade calculator only."><${Seg} label="Star premium" value=${cfg.star} onChange=${v=>set('star',v)} opts=${[[1,'None'],[1.15,'Some'],[1.3,'Strong']]}/></${F_}>
     </div>
