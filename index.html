@@ -1629,19 +1629,26 @@ function LeagueView({teams, me, M, cfg, mv, lg, mv0, onOpen, onStar}){
     <div class="panel"><h2>League value</h2><p class="sub">Every team's players and picks on this board. The darker part of each bar is the starting lineup.</p>
       <div class="lgbars">${byAll.map(x=>html`<div key=${x.t.rid} class=${'lgb'+(x.i===me?' me':'')}><span class="nm">${x.t.name}</span><div class="bar"><i class="all" style=${{width:(100*x.all/mx)+'%'}}></i><i class="st" style=${{width:(100*x.l.tot/mx)+'%'}}></i></div><b class="mono">${fmtV(x.all)}</b></div>`)}</div></div>
     ${mine ? html`<div class="panel"><h2>Your roster</h2><div class="tblwrap"><table><thead><tr><th>Player</th><th>Board</th><th>${mv.label}</th><th>Value</th></tr></thead><tbody>
-      ${mine.t.rows.slice().sort((a,b)=>b.v-a.v).map(r=>html`<tr key=${r.k} class="clk" onClick=${()=>onOpen(r)}><td class="nm"><${PosTag} p=${r.pos}/> ${r.n}${mine.l.used.has(r) ? html` <span class="tm fa">START</span>` : null}</td><td>${r.pos}${r.prank}</td><td>${mv.rank(r) ? r.pos+mv.rank(r) : '–'}</td><td>${fmtV(r.v)}</td></tr>`)}
+      ${mine.t.rows.slice().sort((a,b)=>b.v-a.v).map(r=>html`<tr key=${r.k} class="clk" onClick=${()=>onOpen(r)}><td class="nm"><${PosTag} p=${r.pos}/> ${r.n}${mine.l.used.has(r) ? html` <span class="tm fa">START</span>` : null}${handcuffOf(r, mine.t.rows) ? html` <span class="tm fa" title=${'Backs up your '+handcuffOf(r, mine.t.rows).n}>HC</span>` : null}</td><td>${r.pos}${r.prank}</td><td>${mv.rank(r) ? r.pos+mv.rank(r) : '–'}</td><td>${fmtV(r.v)}</td></tr>`)}
       ${mine.t.picks.map(p=>html`<tr key=${p.k}><td class="nm"><span class="pos PK">PK</span> ${p.n}</td><td>–</td><td>–</td><td>${fmtV(p.v)}</td></tr>`)}</tbody></table></div></div>` : null}`;
 }
 
 // ---- Waivers: board players on no roster in the league, and add/drop moves for your team. A move is suggested when the free
 // agent would start for you, or is worth clearly more on the board than your weakest bench player (taxi and IR never dropped).
+// Handcuffs: an RB whose NFL team's lead back is on YOUR roster (the RB there who has scored more this season). Backtested as
+// a general value bump it didn't help (a handcuff is worth about what his own numbers say), so it changes no values. It's
+// worth knowing for your roster: he's insurance for a starter you own, so the tools flag him and never suggest dropping him.
+function handcuffOf(r, myRows){ if(!r || r.pos!=='RB' || !r.team || r.team==='FA') return null;
+  const pts = x => { const l = x.lines && x.lines[0]; return l ? (l.ppg||0)*(l.g||0) : 0; };
+  const lead = myRows.filter(x=>x!==r && x.pos==='RB' && x.team===r.team && pts(x) > pts(r)).sort((a,b)=>pts(b)-pts(a))[0];
+  return lead || null; }
 function Waivers({teams, me, M, cfg, mv, onOpen}){
   const [pos, setPos] = useState('ALL');
   const T = teams[me]; if(!T) return null;
   const owned = new Set(teams.flatMap(t=>t.rows.map(r=>r.k))), V = r => r.v;
   const fa = M.rows.filter(r=>!owned.has(r.k) && r.v>0.5 && !r.fa).sort((a,b)=>b.v-a.v);
   const base = lineup(T.rows, cfg, V), open = Math.max(0, T.size - T.occ);
-  const drops = T.rows.filter(r=>!base.used.has(r) && !T.taxi.has(r.k) && !T.ir.has(r.k)).sort((a,b)=>a.v-b.v);
+  const drops = T.rows.filter(r=>!base.used.has(r) && !T.taxi.has(r.k) && !T.ir.has(r.k) && !(handcuffOf(r, T.rows) && base.used.has(handcuffOf(r, T.rows)))).sort((a,b)=>a.v-b.v);   // never drop the handcuff to a starter you own
   // keep a backup at every position (starting slots + 1; superflex counts as a QB slot) for byes and injuries
   const need = {QB:cfg.qb+cfg.sf+1, RB:cfg.rb+1, WR:cfg.wr+1, TE:cfg.te+1}, cnt = {QB:0,RB:0,WR:0,TE:0};
   T.rows.filter(r=>!T.taxi.has(r.k) && !T.ir.has(r.k)).forEach(r=>cnt[r.pos]++);
@@ -1652,8 +1659,8 @@ function Waivers({teams, me, M, cfg, mv, onOpen}){
     const d = drops.find(x=>!used.has(x) && (x.pos===r.pos || cnt[x.pos]-1 >= need[x.pos])); if(!d) continue;
     const st2 = lineup([...T.rows.filter(x=>x!==d), r], cfg, V), g2 = st2.tot - base.tot;
     if(st2.used.has(r) && g2 > 0.5 || r.v > d.v*1.25 + 2){ moves.push({add:r, drop:d, gain:g2, starts:st2.used.has(r)}); used.add(d); cnt[d.pos]--; cnt[r.pos]++; } }
-  const line = r => { const l = r.lines && r.lines[0], pr = mv && mv.rank(r);
-    return [r.team||'FA', r.ageNow ? 'age '+fmt(r.ageNow,1) : null, l && l.g ? fmt(l.ppg,1)+' PPG' : 'no games yet', pr ? mv.label+' '+r.pos+pr : null, r.d30!=null && Math.abs(r.d30)>=1 ? (r.d30>0?'▲ ':'▼ ')+fmt(Math.abs(r.d30))+' in 30 days' : null, r.inj||null].filter(Boolean).join(' · '); };
+  const line = r => { const l = r.lines && r.lines[0], pr = mv && mv.rank(r), hc = handcuffOf(r, T.rows);
+    return [hc ? 'Handcuff to your '+hc.n : null, r.team||'FA', r.ageNow ? 'age '+fmt(r.ageNow,1) : null, l && l.g ? fmt(l.ppg,1)+' PPG' : 'no games yet', pr ? mv.label+' '+r.pos+pr : null, r.d30!=null && Math.abs(r.d30)>=1 ? (r.d30>0?'▲ ':'▼ ')+fmt(Math.abs(r.d30))+' in 30 days' : null, r.inj||null].filter(Boolean).join(' · '); };
   const list = fa.filter(r=>pos==='ALL' || r.pos===pos).slice(0, 25);
   return html`<div class="panel"><h2>Waivers</h2><p class="sub">Players on no roster in ${T.name}'s league, valued on this board in your league's format. ${open ? `You have ${open} open roster spot${open>1?'s':''}.` : 'Your roster is full, so each add comes with a drop: your lowest-valued bench player, never taxi or IR, and never your last backup at a position.'}</p></div>
     ${moves.length ? moves.map((x,i)=>html`<div class="panel tf" key=${i}>
@@ -1682,11 +1689,12 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
       : !res.list.length ? html`<div class="panel empty"><b>No clear wins right now</b><span>Nothing passed both tests: better for you on this board and fair to them at market prices. Try another team direction.</span></div>`
       : res.list.map((x,i)=>{ const t = teams[x.ti], why = [...x.get.map(r=>whyLine(r,'get',mv)), ...x.give.map(r=>whyLine(r,'give',mv))].filter(Boolean);
         const pg = POS.map(q=>[q, x.myBy[1][q]-x.myBy[0][q]]).sort((a,b)=>b[1]-a[1])[0], tg = POS.map(q=>[q, x.theirBy[1][q]-x.theirBy[0][q]]).sort((a,b)=>b[1]-a[1])[0];
+        const hcs = x.get.map(r=>[r, handcuffOf(r, teams[me].rows)]).filter(([,s])=>s);
         const li = r => html`<li key=${r.k}>${r.pos==='PK' ? html`<span class="pos PK">PK</span>` : html`<${PosTag} p=${r.pos}/>`} ${r.n}<span class="mono">${fmtV(r.v)}</span></li>`;
         return html`<div class="panel tf" key=${i}><div class="tfhead"><span class="eyebrow">With ${t.name}</span><button class="btn" onClick=${()=>onLoad(x.give.map(r=>r.k), x.get.map(r=>r.k), x.ti)}>Open in calculator</button></div>
           <div class="tfsides"><div><span class="lbl">You send</span><ul>${x.give.map(li)}</ul></div><div><span class="lbl">You get</span><ul>${x.get.map(li)}</ul></div></div>
           <div class="tfstats"><div><span>Your value</span><b class=${'mono '+(x.myGain>=0?'up':'dn')}>${x.myGain>=0?'+':''}${fmt(x.myGain)}</b></div><div><span>Your starters</span><b class=${'mono '+(x.myLine>=0.5?'up':x.myLine<=-0.5?'dn':'')}>${x.myLine>=0?'+':''}${fmt(x.myLine)}</b></div><div><span>Market says</span><b class="mono">${Math.abs(x.theirMk)<0.04*Math.max(x.gM,x.rM)?'Even':(x.theirMk>0?'Them +':'You +')+fmt(100*Math.abs(x.theirMk)/Math.max(1,x.gM,x.rM),0)+'%'}</b></div></div>
-          <ul class="why">${why.map(w=>html`<li key=${w}>${w}</li>`)}
+          <ul class="why">${why.map(w=>html`<li key=${w}>${w}</li>`)}${hcs.map(([r,s])=>html`<li key=${'hc'+r.k}>${r.n} handcuffs your ${s.n}: insurance if he gets hurt.</li>`)}
             ${x.myLine>=0.5 && pg[1]>0.5 ? html`<li>${x.rkMe[pg[0]] > Math.ceil(x.nT/3) ? 'Fills a need' : 'Upgrades a strength'}: your ${pg[0]} starters rank ${ordn(x.rkMe[pg[0]])} of ${x.nT}, and this adds ${fmt(pg[1])}.</li>` : null}
             ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>=0.04*Math.max(x.gM,x.rM)?', and they win the trade at market prices':''}.</li>` : x.theirMk>=0.04*Math.max(x.gM,x.rM) ? html`<li>Why they'd say yes: at market prices they come out ahead.</li>` : null}</ul></div>`; })}`;
 }
