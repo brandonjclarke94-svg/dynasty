@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       user: {description: 'Sleeper username', required: true, default: 'sgt592extreme'}
+      clean: {description: 'Only delete the test-snapshot branch', required: false, default: 'no'}
 permissions:
   contents: write
 jobs:
@@ -10,9 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 tools/sleeper_snapshot.py "${{ inputs.user }}" /tmp/snap.json
+      - if: inputs.clean == 'yes'
+        run: git push origin --delete test-snapshot || true
+      - if: inputs.clean != 'yes'
+        run: python3 tools/sleeper_snapshot.py "${{ inputs.user }}" /tmp/snap.json
       # kept on a throwaway branch (deleted after testing), never on main
-      - run: |
+      - if: inputs.clean != 'yes'
+        run: |
           git config user.name "brandonjclarke94-svg"
           git config user.email "brandonjclarke94-svg@users.noreply.github.com"
           git checkout --orphan test-snapshot && git rm -rqf . && cp /tmp/snap.json snap.json && git add snap.json
