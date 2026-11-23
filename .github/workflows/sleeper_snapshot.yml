@@ -4,12 +4,16 @@ on:
     inputs:
       user: {description: 'Sleeper username', required: true, default: 'sgt592extreme'}
 permissions:
-  contents: read
+  contents: write
 jobs:
   snap:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 tools/sleeper_snapshot.py "${{ inputs.user }}" snap.json
-      - uses: actions/upload-artifact@v4
-        with: {name: sleeper-snapshot, path: snap.json, retention-days: 3}
+      - run: python3 tools/sleeper_snapshot.py "${{ inputs.user }}" /tmp/snap.json
+      # kept on a throwaway branch (deleted after testing), never on main
+      - run: |
+          git config user.name "brandonjclarke94-svg"
+          git config user.email "brandonjclarke94-svg@users.noreply.github.com"
+          git checkout --orphan test-snapshot && git rm -rqf . && cp /tmp/snap.json snap.json && git add snap.json
+          git commit -qm "Sleeper snapshot for testing" && git push -fq origin test-snapshot

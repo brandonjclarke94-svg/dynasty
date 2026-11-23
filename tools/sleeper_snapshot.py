@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test helper: snapshot one Sleeper user's dynasty leagues (the same public API calls the page makes) so the League
-tools can be checked against a real league offline. Runs only by hand in GitHub Actions; the result is a run artifact,
-never committed. Usage: python3 tools/sleeper_snapshot.py <username> <out.json>"""
+tools can be checked against a real league offline. Runs only by hand in GitHub Actions; the result goes to a throwaway branch
+(test-snapshot), never to main. Usage: python3 tools/sleeper_snapshot.py <username> <out.json>"""
 import json, sys, time, urllib.request
 user, outF = sys.argv[1], sys.argv[2]
 def get(path):
