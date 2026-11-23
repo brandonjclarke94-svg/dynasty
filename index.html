@@ -497,7 +497,7 @@ const POS = ['QB','RB','WR','TE'];
 // one season of raw stats, stored as an array to keep the database small
 const F = ['g','att','py','ptd','pint','car','ry','rtd','tg','rec','recy','rectd','fl','fdP','fdR','fdU','sk','gx'];   // gx: hundredths of a game taken off for partial games (snap counts)
 const DEF = { teams:12, qb:1, rb:2, wr:3, te:1, flex:1, sf:1,
-  ppr:1, tep:0.5, ptd:4, pyd:25, int:-2, fl:-2, fd:0, upside:1, dcw:1, star:1.15, mode:'neutral', league:'dynasty', athw:1, calib:0, ecrw:0.5 };   // calibration off by default (Nov 22): the market-shaped position curves
+  ppr:1, tep:0.5, ptd:4, pyd:25, int:-2, fl:-2, fd:0, upside:1, dcw:1, star:1.15, mode:'neutral', league:'dynasty', athw:1, calib:0, ecrw:0.5, mktw:0.75 };   // calibration off by default (Nov 22): the market-shaped position curves
 const PRESETS = {
   'Superflex PPR':      {qb:1, sf:1, ppr:1,   tep:0},
   'Superflex TE+':      {qb:1, sf:1, ppr:1,   tep:0.5},
@@ -863,8 +863,58 @@ function rankAll(players, cfgIn, now, adj){
     const sc = r => (1-ew)*Math.log(bR.get(r)) + ew*Math.log(eR.get(r));
     [...P].sort((a,b)=>sc(a)-sc(b)).forEach((r,i)=>{ const nb = ladder[i], f = r.v>0 ? nb/r.v : 1;
       r.st = {...r.st, ecrB:{before:r.v, after:nb, bRank:bR.get(r), eRank:eR.get(r), w:ew}, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f}))}; r.v = nb; r.base *= f; }); });
-  return finishBoard(out, c, cfgIn, R, N, S, now, {});
+  // Market-shaped position ladders (share mktw): see MKT_BASE. The correction is worked out in the experts' own scoring and
+  // carried over to yours as a factor per value, so TE premium, PPR and other scoring effects stay the board's.
+  // The experts' and FantasyCalc's numbers are for standard scoring (no TE premium, 4-point passing TDs, no first downs).
+  // When yours differs, the board is also run in that scoring once: scoreF (your value / standard value, by position rank)
+  // carries public prices over to your scoring, and the market shape below is worked out there.
+  const mw = c.mktw!=null ? +c.mktw : 0; let mktC = cfgIn.__mktC || null, scoreF = null;
+  if(!cfgIn.__mktC && !cfgIn.__noBase){ const diff = Object.keys(MKT_BASE).some(k=>(+c[k]||0)!==MKT_BASE[k]);
+    let b = out; if(diff){ const bc = {...cfgIn, ...MKT_BASE, mktw:0, __noBase:1}, key = JSON.stringify(Object.fromEntries(Object.entries(bc).filter(([k])=>!k.startsWith('__'))))+'|'+now+'|'+JSON.stringify(cfgIn.__fcRank||null);
+      // kept between runs: changing only your scoring (TE premium, first downs...) doesn't redo the standard-scoring board
+      if(BASE_RUN.key===key && BASE_RUN.ps===players && BASE_RUN.adj===adj && BASE_RUN.comps===cfgIn.__comps) b = BASE_RUN.rows;
+      else { b = rankAll(players, bc, now, adj).rows; Object.assign(BASE_RUN, {key, ps:players, adj, comps:cfgIn.__comps, rows:b}); } }
+    if(diff) scoreF = scoringFactor(b, out);
+    if(mw>0) mktC = mktCurve(b, out, em, mw, cfgIn.__fcRank||null, c.mktcap||MKT_CAP); }
+  if(mw>0) applyMkt(out, mktC);
+  const fin = finishBoard(out, c, cfgIn, R, N, S, now, {}); fin.mktC = mktC; fin.scoreF = scoreF; fin.mktFc = !!cfgIn.__fcRank; return fin;
 }
+// Market-shaped position ladders (Nov 22 2026). Within a position the board orders players nearly as well as the experts,
+// but how the positions compare (is RB20 worth WR15? QB12?) was its weakest part: 2020-23 backtest, all positions together,
+// board 0.60 vs experts 0.66. The experts' OVERALL ranks say where the k-th best player at a position belongs among
+// everyone; read off this board's own overall value curve at that rank, they give a market ladder for each position.
+// Each rung of the board's ladder is pulled toward it (share mktw, log scale, smoothed over nearby rungs), in the experts'
+// scoring (MKT_BASE), and the same factor is applied in yours. Order within a position never changes.
+// The market is the experts' overall rank and, when loaded, FantasyCalc's (real trades), averaged on a log scale. Only the
+// experts' part could be backtested (no FantasyCalc history): 2020-23, board on the experts' players 0.640 -> 0.647
+// superflex (experts 0.651) and 0.620 -> 0.633 1QB (experts 0.636) at 75%; 100% added nothing more.
+const BASE_RUN = {key:null};
+const MKT_BASE = {ppr:1, tep:0, ptd:4, pyd:25, int:-2, fl:-2, fd:0, sack:0, fdRec:0, fdRush:0, fdPass:0};
+function fcVariant(c){ const near = (x, xs) => xs.reduce((a,b)=>Math.abs(b-x)<Math.abs(a-x)?b:a); return `${(c.qb>=2||c.sf)?2:1}-${near(c.teams,[10,12,14])}-${near(c.ppr,[0,0.5,1])}`; }
+function slIndex(players, slmap){ const m = {...((slmap&&slmap.m)||{})}; players.forEach(p=>{ if(p.sl) m[p.sl] = p.k; }); return m; }
+// FantasyCalc overall rank of each board player, in the variant nearest this format
+function fcRankMap(fc, idx, c){ const map = fc && fc.v && fc.v[fcVariant(c)]; if(!map || !idx) return null; const fv = {};
+  Object.entries(map).forEach(([sid, val])=>{ const k = idx[sid]; if(k && !(fv[k] > val)) fv[k] = val; });
+  const o = {}; Object.keys(fv).sort((a,b)=>fv[b]-fv[a]).forEach((k,i)=>o[k] = i+1); return o; }
+const smooth5 = a => a.map((x,i)=>{ let s=0, n=0; for(let j=Math.max(0,i-2); j<=Math.min(a.length-1,i+2); j++){ s+=a[j]; n++; } return s/n; });
+function scoringFactor(base, mine){ const F = {}; POS.forEach(q=>{ const b = base.filter(r=>r.pos===q && r.v>0).map(r=>r.v).sort((x,y)=>y-x), m = mine.filter(r=>r.pos===q && r.v>0).map(r=>r.v).sort((x,y)=>y-x), n = Math.min(b.length, m.length, 150);
+  F[q] = smooth5(Array.from({length:n}, (_,i)=>Math.log(m[i]/b[i]))).map(x=>+Math.exp(x).toFixed(3)); }); return F; }
+const MKT_CAP = 1.5;   // no rung moves more than 1.5x either way (the market's deep tail is flat: every rostered player costs something)
+function mktCurve(base, mine, em, mw, fcR, cap){ const lc = Math.log(cap||MKT_CAP); const C = {}, curve = base.filter(r=>r.v>0).map(r=>r.v).sort((a,b)=>b-a); if(curve.length<50) return C;
+  const mr = r => { const e = r.ecr && r.ecr[em], f = fcR && fcR[r.k]; return e && f ? Math.exp((Math.log(e)+Math.log(f))/2) : e || f || null; };
+  POS.forEach(q=>{ const P = base.filter(r=>r.pos===q && r.v>0 && mr(r)).sort((a,b)=>mr(a)-mr(b)); if(P.length<12) return;
+    const lb = P.map(r=>r.v).sort((a,b)=>b-a), lr = P.map((r,i)=>Math.log(curve[Math.min(curve.length, Math.round(mr(r)))-1]/lb[i]));
+    const sm = smooth5(lr);
+    const byK = Object.fromEntries(P.map(r=>[r.k, 1])), lu = mine.filter(r=>r.pos===q && r.v>0 && byK[r.k]).map(r=>r.v).sort((a,b)=>b-a), n = Math.min(lu.length, sm.length);
+    C[q] = lu.slice(0, n).map((v,i)=>[v, Math.max(-lc, Math.min(lc, mw*sm[i]))]); }); return C; }
+function applyMkt(out, C){ POS.forEach(q=>{ const T = C && C[q]; if(!T || T.length<2) return;
+    const fOf = v => { if(v>=T[0][0]) return T[0][1]; const L = T.length-1; if(v<=T[L][0]) return T[L][1]; let i = 1; while(i<L && v<T[i][0]) i++;
+      const a = Math.log(T[i-1][0]), b = Math.log(T[i][0]), x = (Math.log(v)-b)/((a-b)||1); return T[i][1] + x*(T[i-1][1]-T[i][1]); };
+    let prev = Infinity;   // highest first; nobody passes the player above him
+    out.filter(r=>r.pos===q && r.v>0).sort((a,b)=>b.v-a.v).forEach(r=>{ let nv = r.v*Math.exp(fOf(r.v)); if(nv > prev) nv = prev*0.9999; prev = nv;
+      const f = nv/r.v; r.v = nv; r.base *= f; r.st = {...r.st, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})), mkt:f}; }); });
+  const tot = [...out].sort((a,b)=>b.v-a.v).slice(0,200).reduce((a,r)=>a+r.v,0), f = tot>0 ? LEVEL/tot : 1;
+  out.forEach(r=>{ r.v*=f; r.base*=f; r.st = {...r.st, value:r.st.value*f, yrs:(r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})), mkt:(r.st.mkt||1)*f}; }); }
 function finishBoard(out, c, cfgIn, R, N, S, now, extra){
   // Value first. Players whose values round to the same number (most often the many 0s below replacement) are ordered by how close
   // their expected scoring is to replacement at their position, then by this season's scoring, then by expert rank.
@@ -1424,6 +1474,7 @@ function Sheet({r, M, canEdit, onAdj, onInj, onOut, onClose, starred, onStar, H}
       ${st.idle ? html`<p class="sub" style=${{marginTop:8}}>Healthy but no games this season: his expected scoring is marked down ${fmt(100*st.idle,0)}%, the same way a rookie who hasn't taken a snap is.</p>` : null}
       ${st.inj ? html`<p class="sub" style=${{marginTop:8}}>Currently ${r.inj}: value marked down ${fmt(100*st.inj,0)}%.</p>` : null}
       ${st.ecrB && Math.abs(st.ecrB.after-st.ecrB.before)>0.5 ? html`<p class="sub" style=${{marginTop:8}}>Expert blend (${fmt(100*st.ecrB.w,0)}%): board ${r.pos}${st.ecrB.bRank} and experts ${r.pos}${st.ecrB.eRank} among ranked ${r.pos}s, so his value moves from ${fmtV(st.ecrB.before)} to ${fmtV(st.ecrB.after)} (Format tab to change).</p>` : null}
+      ${st.mkt && Math.abs(st.mkt-1)>0.05 ? html`<p class="sub" style=${{marginTop:8}}>Market shape: ${st.mkt>1 ? 'up' : 'down'} ${fmt(Math.abs(100*(st.mkt-1)),0)}%, because the market (experts${M.mktFc ? ' and FantasyCalc' : ''}) prices ${r.pos}s at his spot in the ${r.pos} ranks ${st.mkt>1 ? 'higher' : 'lower'} against other positions than the board's own numbers do (Format tab to change).</p>` : null}
       ${st.cal && Math.abs(st.cal-1)>0.05 ? html`<p class="sub" style=${{marginTop:8}}>Cross-position calibration: ×${fmt(st.cal,2)}. Over 2012–21, ${r.pos}s valued like him ${st.cal>1?'produced more':'produced less'} than the board's raw number said, compared with other positions (Format tab to switch off).</p>` : null}
       ${st.lost ? html`<p class="sub" style=${{marginTop:8}}>Lost season: a ${r.pos} below starter level who misses nearly all of a season tends to lose his spot for good, so he's marked down another ${fmt(100*st.lost,0)}% (backtested on 2012–22).</p>` : null}
       ${st.miss && st.ovr ? html`<p class="sub" style=${{marginTop:8}}>Injury news: out about ${fmt(st.miss,0)} more games${st.ovr.note?' ('+st.ovr.note+')':''}, so value is marked down ${fmt(100*(1-st.missF),1)}%. A few missed games barely touch a dynasty value.</p>` : null}
@@ -1461,23 +1512,25 @@ function leagueCfg(lg, hasFd){ const rp = lg.roster_positions||[], cnt = t => rp
   return c; }
 const lgSummary = lg => { const c = leagueCfg(lg, false); return `${c.teams} teams · ${c.qb>=2?'2QB':c.sf?'Superflex':'1QB'} · ${c.ppr===1?'PPR':c.ppr===0.5?'Half PPR':c.ppr?c.ppr+' PPR':'Standard'}${c.tep?' · TE+'+c.tep:''} · ${c.league==='redraft'?'Redraft':(lg.settings&&lg.settings.type===1)?'Keeper':'Dynasty'}`; };
 // Sleeper player id -> board key: the builder stores each player's Sleeper id; the separate map covers boards built before that
-function slIndex(players, slmap){ const m = {...((slmap&&slmap.m)||{})}; players.forEach(p=>{ if(p.sl) m[p.sl] = p.k; }); return m; }
 // what the market pays: the board value at the player's expert-consensus rank (other managers trade on consensus)
 // what the market pays. With FantasyCalc (public values from real dynasty trades, fetched daily for each QB count, team count
 // and PPR) the market is the board's value at the player's FantasyCalc overall rank, so it keeps the public's view across
 // positions; without it, the board value at his expert-consensus position rank. Either way, the board's own value scale.
-function fcVariant(c){ const near = (x, xs) => xs.reduce((a,b)=>Math.abs(b-x)<Math.abs(a-x)?b:a); return `${(c.qb>=2||c.sf)?2:1}-${near(c.teams,[10,12,14])}-${near(c.ppr,[0,0.5,1])}`; }
 function marketFn(M, fc, idx){
   const map = fc && fc.v && fc.v[fcVariant(M.cfg)];
   if(map && idx && !M.redraft){
     const fv = {}; Object.entries(map).forEach(([sid, val])=>{ const k = idx[sid]; if(k && !(fv[k] > val)) fv[k] = val; });
+    // FantasyCalc prices standard scoring; with TE premium or other scoring changes, each price is carried over by how much
+    // your scoring changes the board's value at that position rank (M.scoreF)
+    if(M.scoreF){ const byK = Object.fromEntries(M.rows.map(r=>[r.k, r])), cnt0 = {};
+      Object.keys(fv).filter(k=>byK[k]).sort((a,b)=>fv[b]-fv[a]).forEach(k=>{ const q = byK[k].pos, Fq = M.scoreF[q]; cnt0[q] = (cnt0[q]||0)+1; if(Fq && Fq.length) fv[k] *= Fq[Math.min(Fq.length, cnt0[q])-1]; }); }
     // FantasyCalc's own prices, converted to board units with ONE scale (the median board/FantasyCalc ratio among its top
     // 120), so the public's view of how players compare (two mid starters vs one young back) is kept as it is
     const P = M.rows.filter(r=>fv[r.k]).sort((a,b)=>fv[b.k]-fv[a.k]), pR = {}, cnt = {};
     P.forEach(r=>{ cnt[r.pos] = (cnt[r.pos]||0)+1; pR[r.k] = cnt[r.pos]; });
     const rat = P.slice(0,120).filter(r=>r.v>0).map(r=>r.v/fv[r.k]).sort((a,b)=>a-b), k = rat.length ? rat[rat.length>>1] : 0, low = P.length ? fv[P[P.length-1].k] : 0;
     const f = r => { if(!r || r.pos==='PK') return r ? r.v : 0; return fv[r.k] ? k*fv[r.k] : Math.min(r.v, k*low); };
-    f.rank = r => pR[r.k] || null; f.label = 'Public'; f.src = 'FantasyCalc'; f.at = fc.at; f.tep = M.cfg.tep>0; return f; }
+    f.rank = r => pR[r.k] || null; f.label = 'Public'; f.src = 'FantasyCalc'; f.at = fc.at; f.tep = M.cfg.tep>0; f.scored = !!M.scoreF; return f; }
   const lad = {}, nE = {}; POS.forEach(q=>{ const P = M.rows.filter(r=>r.pos===q); lad[q] = P.map(r=>r.v).sort((a,b)=>b-a); nE[q] = P.filter(r=>r.ecrPos).length; });
   const f = r => { if(!r || r.pos==='PK') return r ? r.v : 0; const L = lad[r.pos]; if(!L || !L.length) return r.v;
     return r.ecrPos ? L[Math.min(L.length, r.ecrPos)-1] : Math.min(r.v, L[Math.min(L.length-1, nE[r.pos])]||0); };
@@ -1537,8 +1590,10 @@ function findTrades(teams, me, c, mv){
       // Rebuild: never get older. The package you take on can't be more than a year older (value-weighted; a pick counts as
       // a 21-year-old) than the one you send, whatever the board says about the next few seasons.
       if(c.mode==='rebuild' && wAge(get) > wAge(give) + 1) continue;
-      if(theirMk > 0.25*Math.max(gM, rM)) continue;   // overpaying at market prices: your side could fetch more elsewhere
-      const score = myGain + lam*myLine - 0.5*Math.max(0, theirMk - 0.08*Math.max(gM, rM)); if(score < 0.04*pkg || myGain + myLine <= 0) continue;
+      // overpaying at market prices: your side could fetch more elsewhere. Since the market shape (Nov 22) the board and the
+      // market are about equally accurate, so a big overpay on the board's say-so alone isn't an edge: capped at 15%.
+      if(theirMk > 0.15*Math.max(gM, rM)) continue;
+      const score = myGain + lam*myLine - 0.5*Math.max(0, theirMk - 0.05*Math.max(gM, rM)); if(score < 0.04*pkg || myGain + myLine <= 0) continue;
       out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by], rkMe, rkThem:rkMk[ti], nT}); } });
   out.sort((a,b)=>b.score-a.score);
   const per = {}, gotK = {}, gaveK = {}, pick = [];
@@ -1722,7 +1777,7 @@ function Trade({M, cfg, setCfg, players, slmap, fc, H, needH, hasFd, onOpen, onS
       t.pub = t.got.map((s,i)=>s.map((r,j)=>r.pos==='PK' || !then ? mv0(r) : mv0(r)*Math.max(0.2, Math.min(5, t.brd[i][j]/Math.max(1, r.v))))); t.hind = !!then; });
     return {trades:tr, hind:!!then, m: tr.length>=5 ? fitLeagueMarket(tr, M.cfg.star) : null}; }, [M, mv0, S.L, idx, H]);
   const mv = useMemo(()=>{ if(!mv0) return null; if(!lg || !lg.m) return mv0; const m = lg.m;
-    const f = r => mv0(r)*(m[r && r.pos==='PK' ? 'PK' : r && r.pos]||1); f.rank = mv0.rank; f.label = mv0.label; f.src = mv0.src+' + your league\'s trades'; f.base = mv0.src; f.lg = m; f.at = mv0.at; f.tep = mv0.tep; return f; }, [mv0, lg]);
+    const f = r => mv0(r)*(m[r && r.pos==='PK' ? 'PK' : r && r.pos]||1); f.rank = mv0.rank; f.label = mv0.label; f.src = mv0.src+' + your league\'s trades'; f.base = mv0.src; f.lg = m; f.at = mv0.at; f.tep = mv0.tep; f.scored = mv0.scored; return f; }, [mv0, lg]);
   if(!M || !M.rows.length) return html`<div class="panel empty"><b>No values yet</b><span>The trade tools open once the board has players.</span></div>`;
   const connected = !!teams;
   const view = !connected && tab!=='calc' ? 'calc' : tab;
@@ -1834,7 +1889,7 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
         <div class="ybars">${yr[0].map((_,j)=>html`<div key=${j} class="yb"><div class="yp">${[0,1].map(i=>html`<i key=${i} class=${'s'+i} style=${{height:(100*yr[i][j]/ymx)+'%'}} title=${fmt(yr[i][j])}></i>`)}</div><span>${"'"+String(M.season+j).slice(2)}</span></div>`)}</div>
         <div class="legend"><span><i class="s0"></i>${lab(0)}</span><span><i class="s1"></i>${lab(1)}</span></div>
         <p class="note">Next two seasons: ${fmt(soon[0])} vs ${fmt(soon[1])}. After that: ${fmt(later[0])} vs ${fmt(later[1])}. ${(soon[0]>soon[1]) !== (later[0]>later[1]) ? `${lab(soon[0]>soon[1]?0:1)} holds more value in the next two seasons; ${lab(soon[0]>soon[1]?1:0).replace(/^W/,'w')} holds more after that.` : ''}</p></div>
-      <div class="panel"><h3 style=${{marginTop:0}}>Board vs market</h3><p class="note">The board's value against what ${mv.lg ? 'your league pays (FantasyCalc adjusted by your league\'s own trades)' : mv.src==='FantasyCalc' ? 'the public trade market (FantasyCalc) pays'+(mv.tep ? '; its values have no TE premium' : '') : 'expert consensus would pay'}. A side the market rates higher than the board is a good one to send.</p>
+      <div class="panel"><h3 style=${{marginTop:0}}>Board vs market</h3><p class="note">The board's value against what ${mv.lg ? 'your league pays (FantasyCalc adjusted by your league\'s own trades)' : mv.src==='FantasyCalc' ? 'the public trade market (FantasyCalc) pays'+(mv.tep ? (mv.scored ? ', carried over to your TE premium and scoring' : '; its values have no TE premium') : '') : 'expert consensus would pay'}. A side the market rates higher than the board is a good one to send.</p>
         ${[0,1].map(i=>{ const m2 = Math.max(E[0],E[1],EM[0],EM[1])||1; return html`<div key=${i} class="bvm"><b>${lab(i)}</b>
           <div class="bvr"><span>Board</span><div class="bar"><i class=${'s'+i} style=${{width:(100*E[i]/m2)+'%'}}></i></div><span class="mono">${fmt(E[i])}</span></div>
           <div class="bvr"><span>Market</span><div class="bar"><i class=${'s'+i+' mk'} style=${{width:(100*EM[i]/m2)+'%'}}></i></div><span class="mono">${fmt(EM[i])}</span></div></div>`; })}
@@ -1884,7 +1939,8 @@ function FormatView({cfg, setCfg, def, canEdit, onSaveDef, hasFd}){
       <${F_} label="Draft capital weight" hint="Raise to trust draft slot more for young players with thin production."><${Seg} label="Draft capital weight" value=${cfg.dcw} onChange=${v=>set('dcw',v)} opts=${[[1,'1×'],[1.5,'1.5×'],[2,'2×'],[3,'3×']]}/></${F_}>
       <${F_} label="Athleticism" hint="Combine athleticism nudges draft slot for young players, only as much as it has predicted fantasy output beyond draft slot: TEs most, RBs and QBs a little, WRs not at all."><${Seg} label="Athleticism" value=${cfg.athw!=null?cfg.athw:1} onChange=${v=>set('athw',v)} opts=${[[0,'Off'],[1,'Data-backed'],[2,'Double']]}/></${F_}>
       <${F_} label="Upside" hint="How much an uncertain future is worth. High lifts young players, short track records and players near replacement, who have the most room to boom; proven stars barely move. Low trusts the averages."><${Seg} label="Upside" value=${cfg.upside} onChange=${v=>set('upside',v)} opts=${[[0.75,'Low'],[1,'Normal'],[1.5,'High']]}/></${F_}>
-      <${F_} label="Expert blend" hint="Blends each player's position rank with expert consensus (FantasyPros), then hands out the board's values for that position in the blended order. Only the experts' order within a position is used, because their rankings are built for one scoring system; how positions compare stays in your scoring. Backtested (2020-24, all positions together, next two seasons): board alone 0.60, 25% 0.63, 50% 0.65, 75% 0.66."><${Seg} label="Expert blend" value=${cfg.ecrw!=null?cfg.ecrw:0.5} onChange=${v=>set('ecrw',v)} opts=${[[0,'Off'],[0.25,'25%'],[0.5,'50%'],[0.75,'75%']]}/></${F_}>
+      <${F_} label="Expert blend" hint="Blends each player's position rank with expert consensus (FantasyPros), then hands out the board's values for that position in the blended order. Only the experts' order within a position is used, because their rankings are built for one scoring system; how positions compare stays in your scoring. Backtested (2020-23, next two seasons, today's engine): board alone 0.58, 50% 0.61; 75% was no better."><${Seg} label="Expert blend" value=${cfg.ecrw!=null?cfg.ecrw:0.5} onChange=${v=>set('ecrw',v)} opts=${[[0,'Off'],[0.25,'25%'],[0.5,'50%'],[0.75,'75%']]}/></${F_}>
+      <${F_} label="Market shape" hint="How positions compare (is RB20 worth WR15?). Each position's value ladder is pulled toward where the market puts its players overall: expert consensus plus FantasyCalc's real-trade values when loaded. Worked out in standard scoring and carried over to yours, so TE premium and other scoring changes still count; order within a position never changes; no step moves more than 1.5x. Backtested (2020-23, expert part only): accuracy across positions 0.605 to 0.616 superflex, 0.594 to 0.606 1QB, level with the experts on the players they rank."><${Seg} label="Market shape" value=${cfg.mktw!=null?cfg.mktw:0.75} onChange=${v=>set('mktw',v)} opts=${[[0,'Off'],[0.5,'50%'],[0.75,'75%'],[1,'100%']]}/></${F_}>
       <${F_} label="Cross-position calibration" hint="Off (default): position values follow the shape the trade market uses (checked against RosterAudit: the top 150 by position matches closely). On: deep and mid values are mapped onto what players at that value actually produced over the next four seasons: backup QBs in superflex and young TEs well above market, deep RB/WR stashes below. Better for predicting production, worse for pricing trades."><${Seg} label="Cross-position calibration" value=${cfg.calib!=null?cfg.calib:0} onChange=${v=>set('calib',v)} opts=${[[1,'On'],[0,'Off']]}/></${F_}>
       <${F_} label="Star premium" hint="Trade calculator only."><${Seg} label="Star premium" value=${cfg.star} onChange=${v=>set('star',v)} opts=${[[1,'None'],[1.15,'Some'],[1.3,'Strong']]}/></${F_}>
     </div>
@@ -2162,12 +2218,12 @@ function App(){
   }, [D.QB, D.RB, D.WR, D.TE, D.injuries, D.outlook]);
   const M = useMemo(()=>{
     if(!players.length) return null;
-    const adj = (D.adj&&D.adj.rows)||{}, cls = (D.classes&&D.classes.years)||{}, m = rankAll(players, {...cfg, __class:cls, __ecrAt:(D.meta&&D.meta.ecrAt)||null, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null}, now, adj);
+    const adj = (D.adj&&D.adj.rows)||{}, cls = (D.classes&&D.classes.years)||{}, m = rankAll(players, {...cfg, __class:cls, __ecrAt:(D.meta&&D.meta.ecrAt)||null, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null, __fcRank:fcRankMap(D.fc, slIndex(players, D.slmap), cfg)}, now, adj);
     const w30 = D.meta && D.meta.w30;
     if(w30){   // the same board as of ~30 days ago: this season's stats through week w30, everyone 30 days younger
       const S = String(m.season), then = now - 30*864e5;
       const past = players.map(p=> p.s30===undefined ? p : {...p, s:{...p.s, [S]:p.s30}});
-      const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null}, then, adj), by = {};
+      const m0 = rankAll(past, {...cfg, __class:cls, __left: m.left, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null, __mktC:m.mktC||null, __noBase:1}, then, adj), by = {};
       m0.rows.forEach(r=>by[r.k]=r);
       // Trend = his value today minus what his position rank of 30 days ago is worth today. (Raw values drift up for
       // everyone good as a season's games pile up, so a plain before/after would call nearly every star a riser.)
@@ -2176,7 +2232,7 @@ function App(){
       m.w30 = w30;
     }
     return m;
-  }, [players, JSON.stringify(cfg), D.adj, D.meta, D.classes, D.comps]);
+  }, [players, JSON.stringify(cfg), D.adj, D.meta, D.classes, D.comps, D.fc, D.slmap]);
   // public market (FantasyCalc, real trades) beside each player: his position rank there, its value on this board's scale,
   // and a flag where the two disagree a lot (a second look, never a change to his value)
   const slIdx = useMemo(()=>slIndex(players, D.slmap), [players, D.slmap]);
@@ -2197,7 +2253,7 @@ function App(){
       const yr = 365.25*864e5, sept = y => new Date(y,8,1).getTime();
       const last = players.filter(p=>p.dy===M.season && p.dp).map(p=>({...p, k:'was_'+p.k, s:{}, pro:1, inj:null, ovr:null, rep:null, out:null, comp:null, team:String(Y), dy:Y, ad,
         age:(p.age - ((p.ad||ad) - sept(M.season))/yr) - (sept(Y) - ad)/yr}));   // as a prospect a year on, at the age he was at his own draft
-      const run = rankAll([...players, ...pros, ...last], {...cfg, __class:(D.classes&&D.classes.years)||{}, __comps:D.comps||null}, now, (D.adj&&D.adj.rows)||{});
+      const run = rankAll([...players, ...pros, ...last], {...cfg, __class:(D.classes&&D.classes.years)||{}, __comps:D.comps||null, __mktC:M.mktC||null, __noBase:1}, now, (D.adj&&D.adj.rows)||{});
       const byNow = Object.fromEntries(M.rows.map(r=>[r.k, r.v])), rat = run.rows.filter(r=>byNow[r.k]>50).map(r=>byNow[r.k]/r.v).sort((a,b)=>a-b), f = rat.length ? rat[rat.length>>1] : 1;
       const src = Object.fromEntries(pros.map(p=>[p.k, p])), rows = run.rows.filter(r=>src[r.k]).map(r=>{ const v = r.v*f; return {n:r.n, pos:r.pos, school:src[r.k].school, pick:src[r.k].dp, v, like:M.rows.filter(x=>x.v>v).length+1}; }).sort((a,b)=>b.v-a.v);
       const lastV = run.rows.filter(r=>r.k.startsWith('was_')).map(r=>r.v*f).sort((a,b)=>b-a), n = Math.min(12, rows.length, lastV.length);
@@ -2217,7 +2273,7 @@ function App(){
   useEffect(()=>{
     if(!(open || wantHist) || !M || (hist && hist.key===histKey)) return;
     const t = setTimeout(()=>{ try{
-      const H = valueHistory(players, {...cfg, __class:(D.classes&&D.classes.years)||{}, __comps:D.comps||null}, (D.adj&&D.adj.rows)||{}, M.season, now);
+      const H = valueHistory(players, {...cfg, __class:(D.classes&&D.classes.years)||{}, __comps:D.comps||null, __mktC:M.mktC||null, __noBase:1}, (D.adj&&D.adj.rows)||{}, M.season, now);
       setHist({key:histKey, H});
     }catch(e){ console.error(e); setHist({key:histKey, H:[]}); } }, 60);
     return ()=>clearTimeout(t);
