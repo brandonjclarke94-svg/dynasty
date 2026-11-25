@@ -1899,6 +1899,18 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
   const EM = items.map(s=>Math.pow(s.reduce((a,r)=>a+tradeVal(mv(r), star),0), 1/star));
   const age = items.map(s=>{ const p = s.filter(r=>r.pos!=='PK'), w = p.reduce((a,r)=>a+r.v,0); return w ? p.reduce((a,r)=>a+r.v*(r.ageNow||0),0)/w : null; });
   const teamsIn = [sideTeam(0), sideTeam(1)], lab = i => teamsIn[i] ? 'What '+teamsIn[i].name+' sends' : 'Side '+(i?'B':'A');
+  // Complete it: with your pieces on both sides, which specific players or picks would make it even? The side sending
+  // less adds from its own roster (its team's roster when one is picked, any player otherwise): single pieces first,
+  // then pairs, landing within 5% on the board; the market check for each is shown beside it.
+  const finish = useMemo(()=>{ if(!items[0].length && !items[1].length) return null; if(!(T[0]||T[1]) || diff<0.05) return null;
+    const lo = T[0]<T[1] ? 0 : 1, target = Math.max(E[0], E[1]), have = new Set([...sides[0], ...sides[1]]), st = sideTeam(lo);
+    const pool = (st ? [...st.rows, ...st.picks] : [...M.rows, ...(M.picks||[])]).filter(r=>!have.has(r.k) && r.v>=1).sort((a,b)=>b.v-a.v).slice(0, 60);
+    const E2 = add => Math.pow(T[lo] + add.reduce((a,r)=>a+tradeVal(r.v, star),0), 1/star), gap = e => (e - target)/target;
+    const mk = (add) => { const e = E2(add), mIn = Math.pow(items[lo].concat(add).reduce((a,r)=>a+tradeVal(mv(r), star),0), 1/star), mOther = EM[1-lo]; return {add, e, g:gap(e), mg: mOther ? (mIn - mOther)/Math.max(mIn, mOther) : 0}; };
+    let out = pool.map(r=>mk([r])).filter(x=>Math.abs(x.g)<=0.05).sort((a,b)=>Math.abs(a.g)-Math.abs(b.g)).slice(0,4);
+    if(out.length<2){ const P = pool.slice(0,30), pr = []; for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const x = mk([P[i],P[j]]); if(Math.abs(x.g)<=0.05) pr.push(x); }
+      out = out.concat(pr.sort((a,b)=>Math.abs(a.g)-Math.abs(b.g)).slice(0, 4-out.length)); }
+    return {lo, list:out, who: teamsIn[lo]}; }, [JSON.stringify(sides), JSON.stringify(sideT), M, mv]);
   const lineImpact = teamsIn.map((t,i)=>{ if(!t) return null; const out = new Set(items[i]), inn = items[1-i].filter(r=>r.pos!=='PK');
     const a = lineup(t.rows, c, r=>r.v), b = lineup([...t.rows.filter(r=>!out.has(r)), ...inn], c, r=>r.v); return {t, a, b}; });
   const later = yr.map(y=>y.slice(2).reduce((a,x)=>a+x,0)), soon = yr.map(y=>y.slice(0,2).reduce((a,x)=>a+x,0));
@@ -1920,6 +1932,9 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
     </div>`)}</div>
     ${!(sides[0].length+sides[1].length) ? html`<div class="panel empty"><b>Build a trade</b><span>Search a player or a pick on each side, like “Nacua” or “2027 1st”.${teams ? ' Or pick each side\'s team and add straight from its roster.' : ''} Totals and the breakdown appear as you add.</span></div>` : null}
     ${T[0] && T[1] ? html`<div class=${'verdict '+(diff<0.05?'fair':'off')}>${diff<0.05 ? 'Fair: within 5% either way.' : teamsIn[0] && teamsIn[1] ? `${teamsIn[T[0]>T[1]?1:0].name} comes out ahead: it gets ${fmt(100*diff,0)}% more value. To even it, ${teamsIn[T[0]>T[1]?1:0].name} would add about a ${fmt(need)} player to what it sends.` : `Side ${T[0]>T[1]?'A':'B'} is worth ${fmt(100*diff,0)}% more. Add about a ${fmt(need)} player to side ${T[0]>T[1]?'B':'A'} to even it.`}</div>` : null}
+    ${finish && finish.list.length ? html`<div class="panel"><h3 style=${{marginTop:0}}>Complete it</h3><p class="note">What ${finish.who ? finish.who.name : 'side '+(finish.lo?'B':'A')} could add to make it even on the board (within 5%), keeping everything already in the trade. Tap one to add it. "Board" is how close it lands on this board; "market" is how a public calculator (what the other manager likely uses) would see the finished trade.</p>
+      <div class="fin">${finish.list.map((x,i)=>html`<button class="btn" key=${i} style=${{display:'flex',justifyContent:'space-between',width:'100%',marginTop:6,textAlign:'left'}} onClick=${()=>{ const s2 = sides.map(z=>z.slice()); x.add.forEach(r=>{ if(!s2[finish.lo].includes(r.k)) s2[finish.lo].push(r.k); }); setSides(s2); }}>
+        <span>+ ${x.add.map(r=>(r.pos==='PK'?'':r.pos+' ')+r.n).join(' + ')}</span><span class="mono small">board ${Math.abs(x.g)<0.01 ? 'even' : (x.g>0?'+':'')+fmt(100*x.g,0)+'%'} · market ${Math.abs(x.mg)<0.05 ? 'even' : (x.mg>0 ? (finish.who ? finish.who.name : 'side '+(finish.lo?'B':'A')) : (teamsIn[1-finish.lo] ? teamsIn[1-finish.lo].name : 'side '+(finish.lo?'A':'B')))+' gives '+fmt(100*Math.abs(x.mg),0)+'% more'}</span></button>`)}</div></div>` : null}
     ${any ? html`<div class="tgrid2">
       <div class="panel"><h3 style=${{marginTop:0}}>Value by season</h3><p class="note">Where each side's value lands: this season on the left, five seasons out on the right. Picks start counting the season after their draft.</p>
         <div class="ybars">${yr[0].map((_,j)=>html`<div key=${j} class="yb"><div class="yp">${[0,1].map(i=>html`<i key=${i} class=${'s'+i} style=${{height:(100*yr[i][j]/ymx)+'%'}} title=${fmt(yr[i][j])}></i>`)}</div><span>${"'"+String(M.season+j).slice(2)}</span></div>`)}</div>
