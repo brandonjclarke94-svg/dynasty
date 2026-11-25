@@ -1563,12 +1563,24 @@ function leagueTeams(L, M, idx, now){
   return teams; }
 // trade finder: packages that raise your value on this board and/or your starting lineup, which the other manager should
 // see as fair or better at consensus (market) prices, and that don't gut his lineup by his own (market) read
-function findTrades(teams, me, c, mv){
+function findTrades(teams, me, c, mv, nowV){
   const star = c.star, lam = ({win:1, neutral:0.5, rebuild:0.15})[c.mode] ?? 0.5, V = r => r.v;
+  // "Your starters" = this season: the points each starter is still expected to add above replacement (the redraft board, in
+  // dynasty units). Contenders trade for points this year; a dynasty value ladder would credit a rookie who sits.
+  const N = nowV ? (r => r.pos==='PK' ? 0 : Math.max(0, nowV[r.k]||0)) : V;
+  // each partner's direction: contenders (top third by record, or by this season's lineup early on) weigh their lineup fully,
+  // rebuilders barely, and a rebuilder won't take on an older package than he sends (he wants youth and picks)
+  const gp = teams.reduce((a,t)=>a+t.w+t.l+t.t,0)/Math.max(1,teams.length), nowTot = teams.map(t=>lineup(t.rows, c, N).tot);
+  const standing = teams.map((t,i)=>({i, s: gp>=4 ? (t.w + 0.5*t.t)/Math.max(1,t.w+t.l+t.t) + nowTot[i]*1e-9 : nowTot[i]})).sort((a,b)=>b.s-a.s).map(x=>x.i);
+  const third = Math.ceil(teams.length/3), dirOf = i => { const r = standing.indexOf(i); return r < third ? 'win' : r >= teams.length - third ? 'rebuild' : 'neutral'; };
+  const lamOf = d => ({win:1, neutral:0.5, rebuild:0.15})[d];
+  // roster spots: a team taking more players than it sends onto a full roster cuts its least valuable player
+  const cutCost = (t, net, deal) => { if(net<=0 || !t.size || t.occ + net <= t.size) return 0; const over = t.occ + net - t.size;
+    return t.rows.filter(r=>!deal.has(r) && !t.taxi.has(r.k) && !t.ir.has(r.k)).map(r=>Math.max(0,r.v)).sort((a,b)=>a-b).slice(0, over).reduce((a,v)=>a+v,0); };
   const E = (xs, f) => Math.pow(xs.reduce((a,r)=>a+tradeVal(f(r), star), 0), 1/star);
   const pool = t => [...t.rows, ...t.picks].filter(r=>r.v>=2).sort((a,b)=>b.v-a.v).slice(0, 22);
   const combos = A => { const o = A.map(x=>[x]); for(let i=0;i<A.length;i++) for(let j=i+1;j<A.length;j++) o.push([A[i], A[j]]); return o; };
-  const T = teams[me], myBase = lineup(T.rows, c, V), A = combos(pool(T)), out = [];
+  const T = teams[me], myBase = lineup(T.rows, c, N), A = combos(pool(T)), out = [];
   const wAge = xs => { const w = xs.reduce((a,r)=>a+r.v,0); return w>0 ? xs.reduce((a,r)=>a+r.v*(r.pos==='PK' ? 21 : (r.ageNow||25)),0)/w : 25; };
   // positional fit: each team's starters at each position, ranked across the league (you on the board, them at market prices).
   // A team only takes on a position it isn't sending back if it isn't already loaded there (top third) and the new player starts.
@@ -1577,24 +1589,27 @@ function findTrades(teams, me, c, mv){
   const rkMe = pr(V)[me], rkMk = pr(V);
   const fits = (recv, sent, rk, after) => { const sq = new Set(sent.filter(r=>r.pos!=='PK').map(r=>r.pos));
     return recv.every(r=>r.pos==='PK' || sq.has(r.pos) || (rk[r.pos] > top && after.used.has(r))); };
-  teams.forEach((t, ti)=>{ if(ti===me) return; const theirBase = lineup(t.rows, c, V), B = combos(pool(t));
+  teams.forEach((t, ti)=>{ if(ti===me) return; const theirBase = lineup(t.rows, c, N), B = combos(pool(t)), tDir = dirOf(ti), tLam = lamOf(tDir);
     for(const give of A) for(const get of B){ if(give.length + get.length > 3) continue;
       const gB = E(give, V), rB = E(get, V), pkg = Math.max(gB, rB), myGain = rB - gB; if(myGain < -0.06*pkg) continue;
       const gM = E(give, mv), rM = E(get, mv), theirMk = gM - rM; if(theirMk < -0.05*Math.max(gM, rM)) continue;
       const gs = new Set(give), rs = new Set(get);
-      const mine2 = lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, V), their2 = lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, V);
+      const mine2 = lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, N), their2 = lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, N);
+      const deal = new Set([...give, ...get]), nP = xs => xs.filter(r=>r.pos!=='PK').length;
+      const myCut = cutCost(T, nP(get)-nP(give), deal), theirCut = cutCost(t, nP(give)-nP(get), deal);
       const myLine = mine2.tot - myBase.tot, theirLine = their2.tot - theirBase.tot;
-      if(theirMk + 0.5*theirLine < -0.03*pkg) continue;
+      if(theirMk - theirCut + tLam*theirLine < -0.03*pkg) continue;
+      if(tDir==='rebuild' && wAge(give) > wAge(get) + 1) continue;   // a rebuilding manager doesn't take on age
       if(theirLine < -0.5 && theirMk < 0.05*pkg) continue;   // weakening his starting lineup needs a clear market win to sell
-      if(!fits(get, give, rkMe, mine2) || !fits(give, get, rkMk[ti], their2)) continue;
+      if(!fits(get, give, rkMe, lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, V)) || !fits(give, get, rkMk[ti], lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, V))) continue;
       // Rebuild: never get older. The package you take on can't be more than a year older (value-weighted; a pick counts as
       // a 21-year-old) than the one you send, whatever the board says about the next few seasons.
       if(c.mode==='rebuild' && wAge(get) > wAge(give) + 1) continue;
       // overpaying at market prices: your side could fetch more elsewhere. Since the market shape (Nov 22) the board and the
       // market are about equally accurate, so a big overpay on the board's say-so alone isn't an edge: capped at 15%.
       if(theirMk > 0.15*Math.max(gM, rM)) continue;
-      const score = myGain + lam*myLine - 0.5*Math.max(0, theirMk - 0.05*Math.max(gM, rM)); if(score < 0.04*pkg || myGain + myLine <= 0) continue;
-      out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by], rkMe, rkThem:rkMk[ti], nT}); } });
+      const score = myGain - myCut + lam*myLine - 0.5*Math.max(0, theirMk - 0.05*Math.max(gM, rM)); if(score < 0.04*pkg || myGain - myCut + myLine <= 0) continue;
+      out.push({ti, give, get, myGain, myLine, theirMk, theirLine, score, myCut, theirCut, tDir, gB, rB, gM, rM, myBy:[myBase.by, mine2.by], theirBy:[theirBase.by, their2.by], rkMe, rkThem:rkMk[ti], nT}); } });
   out.sort((a,b)=>b.score-a.score);
   const per = {}, gotK = {}, gaveK = {}, pick = [];
   for(const x of out){ if(pick.length>=12) break; if((per[x.ti]||0)>=2) continue;
@@ -1731,13 +1746,13 @@ function Waivers({teams, me, M, cfg, mv, onOpen}){
       </tbody></table></div>
       ${!list.length ? html`<p class="note">Nobody on the board is available at this position.</p>` : null}</div>`;
 }
-function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
+function Finder({teams, me, M, cfg, setCfg, mv, onLoad, nowV}){
   const [res, setRes] = useState(null);
-  const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+mv.src+'|'+JSON.stringify(mv.lg||0)+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v);
-  useEffect(()=>{ setRes(null); const t = setTimeout(()=>{ try{ setRes({key, list:findTrades(teams, me, M.cfg, mv)}); }catch(e){ console.error(e); setRes({key, list:[]}); } }, 30); return ()=>clearTimeout(t); }, [key]);
+  const key = teams.map(t=>t.rid+':'+t.rows.length).join(',')+'|'+me+'|'+cfg.mode+'|'+mv.src+'|'+JSON.stringify(mv.lg||0)+'|'+M.rows.length+'|'+(M.rows[0]&&M.rows[0].v)+'|'+(nowV?1:0);
+  useEffect(()=>{ setRes(null); const t = setTimeout(()=>{ try{ setRes({key, list:findTrades(teams, me, M.cfg, mv, nowV)}); }catch(e){ console.error(e); setRes({key, list:[]}); } }, 30); return ()=>clearTimeout(t); }, [key]);
   const T = teams[me];
   return html`<div class="panel"><h2>Trade finder</h2>
-      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at ${mv.lg ? 'your league\'s prices (FantasyCalc, adjusted by the trades your leaguemates have actually made)' : mv.src==='FantasyCalc' ? 'public trade values (FantasyCalc, from real dynasty trades)' : 'expert-consensus prices'}. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start.</p>
+      <p class="sub">Searches every roster for 1-for-1, 2-for-1 and 1-for-2 deals that raise your value on this board or your starting lineup, which the other manager should see as fair or better at ${mv.lg ? 'your league\'s prices (FantasyCalc, adjusted by the trades your leaguemates have actually made)' : mv.src==='FantasyCalc' ? 'public trade values (FantasyCalc, from real dynasty trades)' : 'expert-consensus prices'}. That gap, where the board likes a player more than the market, is where the edge is. Deals respect roster fit: neither team takes on a position it's already loaded at (top third of the league) unless it sends one back, and anyone added there has to start. "Your starters" is this season's lineup (rest-of-season values). Each manager is read by where his team stands: contenders (top third) care about points now, rebuilders (bottom third) about long-term value, and won't take on an older package. One star counts for more than two lesser players adding up to the same value, and a team that has to cut someone to fit a 2-for-1 pays for that roster spot.</p>
       <div class="fld" style=${{marginTop:12}}><label>Your team's direction<span class="hint">Win now weighs your starting lineup more. Rebuild weighs long-term value and picks, and never suggests getting older: what you take on can't be more than a year older than what you send.</span></label>
         <${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/></div></div>
     ${!res || res.key!==key ? html`<div class="panel empty"><b>Looking through ${teams.length-1} rosters</b><span>Checking a few thousand packages.</span></div>`
@@ -1751,13 +1766,22 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad}){
           <div class="tfstats"><div><span>Your value</span><b class=${'mono '+(x.myGain>=0?'up':'dn')}>${x.myGain>=0?'+':''}${fmt(x.myGain)}</b></div><div><span>Your starters</span><b class=${'mono '+(x.myLine>=0.5?'up':x.myLine<=-0.5?'dn':'')}>${x.myLine>=0?'+':''}${fmt(x.myLine)}</b></div><div><span>Market says</span><b class="mono">${Math.abs(x.theirMk)<0.04*Math.max(x.gM,x.rM)?'Even':(x.theirMk>0?'Them +':'You +')+fmt(100*Math.abs(x.theirMk)/Math.max(1,x.gM,x.rM),0)+'%'}</b></div></div>
           <ul class="why">${why.map(w=>html`<li key=${w}>${w}</li>`)}${hcs.map(([r,s])=>html`<li key=${'hc'+r.k}>${r.n} handcuffs your ${s.n}: insurance if he gets hurt.</li>`)}
             ${x.myLine>=0.5 && pg[1]>0.5 ? html`<li>${x.rkMe[pg[0]] > Math.ceil(x.nT/3) ? 'Fills a need' : 'Upgrades a strength'}: your ${pg[0]} starters rank ${ordn(x.rkMe[pg[0]])} of ${x.nT}, and this adds ${fmt(pg[1])}.</li>` : null}
-            ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>=0.04*Math.max(x.gM,x.rM)?', and they win the trade at market prices':''}.</li>` : x.theirMk>=0.04*Math.max(x.gM,x.rM) ? html`<li>Why they'd say yes: at market prices they come out ahead.</li>` : null}</ul></div>`; })}`;
+            ${tg[1]>0.5 ? html`<li>Why they'd say yes: their ${tg[0]} starters rank ${ordn(x.rkThem[tg[0]])} of ${x.nT} and this upgrades them${x.theirMk>=0.04*Math.max(x.gM,x.rM)?', and they win the trade at market prices':''}.</li>` : x.theirMk>=0.04*Math.max(x.gM,x.rM) ? html`<li>Why they'd say yes: at market prices they come out ahead.</li>` : null}
+            ${x.tDir==='rebuild' ? html`<li>${t.name} is in the bottom third this year, so they'd rather have youth and picks than points now: this package isn't older than what they send.</li>` : x.tDir==='win' && x.theirLine>0.5 ? html`<li>${t.name} is in the top third and chasing a title: points this season matter most to them.</li>` : null}
+            ${x.myCut>0.5 ? html`<li>Roster: you'd have to drop a player worth about ${fmt(x.myCut)} to fit everyone (counted).</li>` : null}
+            ${x.theirCut>0.5 ? html`<li>Roster: they'd have to drop a player worth about ${fmt(x.theirCut)} (counted against the deal for them).</li>` : null}</ul></div>`; })}`;
 }
 
 function Trade({M, cfg, setCfg, players, slmap, fc, H, needH, hasFd, onOpen, onStar}){
   const S = useSleeper();
   const idx = useMemo(()=>slIndex(players, slmap), [players, slmap]);
   const teams = useMemo(()=>S.L && M ? leagueTeams(S.L, M, idx, Date.now()) : null, [S.L, M, idx]);
+  // this season's value of every player (the redraft board in this league's format): what a trade does to the lineup now
+  const nowV = useMemo(()=>{ if(!S.L || !M || M.redraft) return null; try{ const R = rankAll(players, {...cfg, league:'redraft'}, Date.now(), {});
+      // the redraft board is on a full-season scale; the points still to come are (games left / 17) of it, and the dynasty
+      // board's unit is the same points (times its level factor), so this season's points add to dynasty value directly
+      const lv = ((M.rows.find(r=>r.st && r.st.lvl) || {}).st || {}).lvl || 1, f = (R.left!=null ? R.left : 17)/17*lv;
+      return Object.fromEntries(R.rows.map(r=>[r.k, r.v*f])); }catch(e){ console.error(e); return null; } }, [S.L, M, players, JSON.stringify(cfg)]);
   const [meSel, setMeSel] = useState(null);
   const me = teams ? (meSel!=null && meSel<teams.length ? meSel : Math.max(0, teams.findIndex(t=>S.conn && t.rid===S.conn.rid))) : -1;
   const setMe = i => { setMeSel(i); if(teams && teams[i]) S.save({...S.conn, rid:teams[i].rid}); };
@@ -1784,7 +1808,7 @@ function Trade({M, cfg, setCfg, players, slmap, fc, H, needH, hasFd, onOpen, onS
   const loadTrade = (give, get, ti) => { setSides([give, get]); setSideT([teams[me].rid, teams[ti].rid]); go('calc'); window.scrollTo(0,0); };
   return html`<${SleeperPanel} S=${S} M=${M} cfg=${cfg} setCfg=${setCfg} hasFd=${hasFd} teams=${teams} me=${me} setMe=${setMe}/>
     ${connected ? html`<div class="subtabs"><${Seg} label="Trade tools" value=${view} onChange=${go} opts=${[['find','Trades'],['fa','Waivers'],['calc','Calculator'],['league','League']]}/></div>` : null}
-    ${view==='find' ? html`<${Finder} teams=${teams} me=${me} M=${M} cfg=${cfg} setCfg=${setCfg} mv=${mv} onLoad=${loadTrade}/>`
+    ${view==='find' ? html`<${Finder} teams=${teams} me=${me} M=${M} cfg=${cfg} setCfg=${setCfg} mv=${mv} onLoad=${loadTrade} nowV=${nowV}/>`
       : view==='fa' ? html`<${Waivers} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} onOpen=${onOpen}/>`
       : view==='league' ? html`<${LeagueView} teams=${teams} me=${me} M=${M} cfg=${cfg} mv=${mv} lg=${lg} mv0=${mv0} onOpen=${onOpen} onStar=${onStar}/>`
       : html`<${Calc} M=${M} sides=${sides} setSides=${setSides} sideT=${sideT} setSideT=${setSideT} teams=${teams} me=${me} mv=${mv} onOpen=${onOpen}/>`}`;
