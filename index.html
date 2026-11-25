@@ -757,7 +757,8 @@ function rankAll(players, cfgIn, now, adj){
   if(c.league==='redraft'){
     let gS0 = 0; rows.forEach(r=>{ const l=r.lines[0]; if(l && l.g>gS0) gS0=l.g; });
     const rd = redraftAll(rows.map(r=>({...r, adj:adj[r.k]||0})), c, S, gS0, now);
-    out = rd.out.filter(r=>r.v>0 || (r.lines[0] && r.lines[0].g>=3));
+    // everyone who has played this season stays listed, even below replacement (a new starter with two games, e.g.)
+    out = rd.out.filter(r=>r.v>0 || (r.lines[0] && r.lines[0].gn>=1) || (r.out && r.out.f>0));
     out.forEach(r=>r.adj = +adj[r.k]||0);
     return finishBoard(out, c, cfgIn, rd.R, rd.N, S, now, {redraft:true, left:rd.left});
   }
