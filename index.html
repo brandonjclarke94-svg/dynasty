@@ -945,6 +945,17 @@ function redraftAll(rows, c, S, gS, nowR){
   const cands = rows.filter(r=>r.lines[0] && r.lines[0].g>=3).map(r=>({pos:r.pos, ppg:r.lines[0].ppg}));
   const {R, N} = replacement(cands, c), kV = volK(rows, S);
   const left = c.__left!=null ? c.__left : Math.max(0, 17 - gS), out = [];   // __left: compare past and present over the same games
+  // Quarterbacks: only the starter plays. On each team the starter is the available QB who threw the most passes in the
+  // team's last two games (or this season, if none), so a backup's few good games don't count as a full season ahead,
+  // and a new starter (an injury replacement) gets every game left. Backups: about 1 game in 8 (injury fill-ins); a QB
+  // sharing the job keeps his share of the recent passes.
+  const qbShare = {}; { const byT = {}; rows.forEach(r=>{ if(r.pos==='QB' && r.team && r.team!=='FA') (byT[r.team]=byT[r.team]||[]).push(r); });
+    Object.values(byT).forEach(qs=>{ const wks = new Set(); qs.forEach(r=>Object.keys((r.p&&r.p.wk)||{}).forEach(w=>wks.add(+w)));
+      const last2 = [...wks].sort((a,b)=>b-a).slice(0,2), att = r => last2.reduce((a,w)=>a+(+(((r.p.wk||{})[w]||[])[1])||0),0);
+      const ok = r => { const ov = ovrLeft(r.ovr, nowR); return !(r.inj==='IR' || (ov && ov>=Math.max(1,left-1)) || (r.rep && r.rep.out>=2)); };
+      const tot = qs.reduce((a,r)=>a+att(r),0), seas = r => { const l = r.lines[0]; return l ? (+((r.p.s||{})[S]||[])[1]||0) : 0; };
+      const avail = qs.filter(ok).sort((a,b)=>(att(b)-att(a)) || (seas(b)-seas(a)));
+      avail.forEach((r,i)=>{ const sh = tot>0 ? att(r)/tot : 0; qbShare[r.k] = i===0 ? 1 : sh>=0.35 ? sh : 0.12; }); }); }
   rows.forEach(r=>{
     const l1 = r.lines[0], l2 = r.lines[1];
     if(!l1 && !(l2 && r.ageNow!=null)) return;
@@ -955,9 +966,9 @@ function redraftAll(rows, c, S, gS, nowR){
     const ov = ovrLeft(r.ovr, nowR), miss = Math.max(ov, r.inj ? 0 : expMiss(r.rep)), gl = r.fa && left<17 ? left*0.15 : ov ? Math.max(0, left - ov) : r.inj ? left*0.4 : Math.max(0, left - miss);   // unsigned mid-season: little chance he plays much
     // On a full-season scale: points above replacement per game x 17, times the share of the remaining games he's
     // expected to play. Values stay put from week to week; only injuries, form and role move them.
-    const av = left>0 ? gl/left : (r.inj ? 0.4 : 1);
+    const av = (left>0 ? gl/left : (r.inj ? 0.4 : 1)) * (r.pos==='QB' && qbShare[r.k]!=null ? qbShare[r.k] : 1);
     const base = Math.max(0, ppg - R[r.pos]) * 17 * av;
-    out.push({...r, st:{redraft:true, ppg, p1, vol:vo, preOut:ppg0, om, moved:r.moved, out:r.out, R:R[r.pos], gl, av, g1, w2, miss, ovr: ov ? r.ovr : null, raw: av>0 && !r.fa ? (ppg - R[r.pos])*av : -1e6 + ppg}, base, v: base*(1+(+r.adj||0)/100)});
+    out.push({...r, st:{redraft:true, ppg, p1, vol:vo, preOut:ppg0, om, moved:r.moved, out:r.out, R:R[r.pos], gl, av, g1, w2, miss, ovr: ov ? r.ovr : null, raw: av>0 && !r.fa ? ppg*av - R[r.pos] : -1e6 + ppg, qbRole: r.pos==='QB' ? (qbShare[r.k]===1 ? 'starter' : qbShare[r.k]!=null ? 'backup' : null) : null}, base, v: base*(1+(+r.adj||0)/100)});
   });
   return {out, R, N, left};
 }

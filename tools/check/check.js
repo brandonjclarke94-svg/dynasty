@@ -19,7 +19,7 @@ const D = JSON.parse(fs.readFileSync(path.join(ROOT, 'data.json'))), COMPS = JSO
 const now = Date.now(), OV = (D.injuries||{}).rows||{}, OL = (D.outlook||{}).rows||{}, adj = (D.adj||{}).rows||{}, cls = (D.classes||{}).years||{}, meta = D.meta||{};
 const players = [];
 for(const q of ['QB','RB','WR','TE']) for(const [k,e] of Object.entries((D[q]||{}).rows||{})){ if(e.nf || !e.s || e.age==null) continue;
-  players.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, comp:e.comp||null, px:e.px||null, fa:e.fa||null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null, sl:e.sl||null}); }
+  players.push({k, n:e.n, pos:q, team:e.team, age:e.age, ad:e.ad||now, dp:e.dp||null, dy:e.dy||null, inj:e.inj, rk:e.rk, s:e.s, s30:e.s30, wk:e.wk||null, ecr:e.ecr||null, ath:e.ath!=null?e.ath:null, comp:e.comp||null, px:e.px||null, fa:e.fa||null, rep:e.rep||null, ovr:OV[k]||null, moved:e.moved||null, out:OL[k]||null, sl:e.sl||null}); }
 const Y = (D.prospects||{}).year, pros = ((D.prospects||{}).rows||[]).filter(x=>['QB','RB','WR','TE'].includes(x.pos)).map(x=>({k:'pro_'+E.normName(x.n), n:x.n, pos:x.pos, team:String(Y), age:x.age-((new Date(Y,8,1)-now)/(365.25*864e5)), ad:now, dp:x.pick, dy:Y, s:{}, pro:1}));
 const base = {...E.DEF, ...((D.defaults||{}).cfg||{}), ...OVER};
 const idx = E.slIndex(players, D.slmap);
