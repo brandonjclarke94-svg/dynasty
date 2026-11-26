@@ -1586,6 +1586,13 @@ function findTrades(teams, me, c, mv, nowV){
   const standing = teams.map((t,i)=>({i, s: gp>=4 ? (t.w + 0.5*t.t)/Math.max(1,t.w+t.l+t.t) + nowTot[i]*1e-9 : nowTot[i]})).sort((a,b)=>b.s-a.s).map(x=>x.i);
   const third = Math.ceil(teams.length/3), dirOf = i => { const r = standing.indexOf(i); return r < third ? 'win' : r >= teams.length - third ? 'rebuild' : 'neutral'; };
   const lamOf = d => ({win:1, neutral:0.5, rebuild:0.15})[d];
+  // Roster construction: each team keeps enough playable players at every position to field its lineup with a backup
+  // (superflex or 2QB: 3 QBs; 1QB: 2; RB/WR/TE: the starters at that position plus one). Playable = at least half the
+  // value of a league starter there. A deal can't take a team below that at a position unless it gets one back there.
+  const nTm = teams.length, need = {QB: (c.sf || c.qb>=2) ? 3 : 2, RB:(c.rb||2)+1, WR:(c.wr||3)+1, TE:(c.te||1)+1};
+  const startV = {}; POS.forEach(q=>{ const vs = teams.flatMap(t=>t.rows).filter(r=>r.pos===q).map(r=>r.v).sort((a,b)=>b-a), n = nTm*({QB:(c.qb||1)+(c.sf?1:0), RB:c.rb||2, WR:c.wr||3, TE:c.te||1})[q]; startV[q] = vs[Math.min(vs.length, n)-1] || 0; });
+  const playable = r => r.pos!=='PK' && r.v >= 0.5*(startV[r.pos]||0);
+  const depthBreak = (t, sent, got) => POS.some(q=>{ const b = t.rows.filter(r=>r.pos===q && playable(r)).length, a = b - sent.filter(r=>r.pos===q && playable(r)).length + got.filter(r=>r.pos===q && playable(r)).length; return a < b && a < need[q]; });
   // roster spots: a team taking more players than it sends onto a full roster cuts its least valuable player
   const cutCost = (t, net, deal) => { if(net<=0 || !t.size || t.occ + net <= t.size) return 0; const over = t.occ + net - t.size;
     return t.rows.filter(r=>!deal.has(r) && !t.taxi.has(r.k) && !t.ir.has(r.k)).map(r=>Math.max(0,r.v)).sort((a,b)=>a-b).slice(0, over).reduce((a,v)=>a+v,0); };
@@ -1612,6 +1619,7 @@ function findTrades(teams, me, c, mv, nowV){
       const myLine = mine2.tot - myBase.tot, theirLine = their2.tot - theirBase.tot;
       if(theirMk - theirCut + tLam*theirLine < -0.03*pkg) continue;
       if(tDir==='rebuild' && wAge(give) > wAge(get) + 1) continue;   // a rebuilding manager doesn't take on age
+      if(depthBreak(T, give, get) || depthBreak(t, get, give)) continue;   // nobody ends up short at a position
       if(theirLine < -0.5 && theirMk < 0.05*pkg) continue;   // weakening his starting lineup needs a clear market win to sell
       if(!fits(get, give, rkMe, lineup([...T.rows.filter(r=>!gs.has(r)), ...get], c, V)) || !fits(give, get, rkMk[ti], lineup([...t.rows.filter(r=>!rs.has(r)), ...give], c, V))) continue;
       // Rebuild: never get older. The package you take on can't be more than a year older (value-weighted; a pick counts as
@@ -1914,6 +1922,13 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
   const lineImpact = teamsIn.map((t,i)=>{ if(!t) return null; const out = new Set(items[i]), inn = items[1-i].filter(r=>r.pos!=='PK');
     const a = lineup(t.rows, c, r=>r.v), b = lineup([...t.rows.filter(r=>!out.has(r)), ...inn], c, r=>r.v); return {t, a, b}; });
   const later = yr.map(y=>y.slice(2).reduce((a,x)=>a+x,0)), soon = yr.map(y=>y.slice(0,2).reduce((a,x)=>a+x,0));
+  // roster construction check (same rule as the trade finder): does either team end up short at a position it sends away?
+  const depthWarn = (()=>{ if(!teams) return []; const need = {QB:(c.sf||c.qb>=2)?3:2, RB:(c.rb||2)+1, WR:(c.wr||3)+1, TE:(c.te||1)+1}, startV = {};
+    POS.forEach(q=>{ const vs = teams.flatMap(t=>t.rows).filter(r=>r.pos===q).map(r=>r.v).sort((a,b)=>b-a), n = teams.length*({QB:(c.qb||1)+(c.sf?1:0), RB:c.rb||2, WR:c.wr||3, TE:c.te||1})[q]; startV[q] = vs[Math.min(vs.length, n)-1] || 0; });
+    const ok = r => r.pos!=='PK' && r.v >= 0.5*(startV[r.pos]||0), out = [];
+    teamsIn.forEach((t,i)=>{ if(!t) return; POS.forEach(q=>{ const b = t.rows.filter(r=>r.pos===q && ok(r)).length, a = b - items[i].filter(r=>r.pos===q && ok(r)).length + items[1-i].filter(r=>r.pos===q && ok(r)).length;
+      if(a < b && a < need[q]) out.push(`${t.name} would be left with ${a} playable ${q}${a===1?'':'s'} (a ${c.sf||c.qb>=2?'superflex ':''}lineup with a backup needs ${need[q]}): ${q==='QB'?'get a QB back':'get one back at '+q}.`); }); });
+    return out; })();
   const line = r => { const l = r.lines && r.lines[0], tr = r.d30;
     return r.pos==='PK' ? 'Rookie pick' : [r.ageNow ? 'Age '+fmt(r.ageNow,1) : null, l && l.g ? fmt(l.ppg,1)+' PPG' : 'No games yet', 'Board '+r.pos+r.prank+(mv.rank(r) ? ' · '+mv.label+' '+r.pos+mv.rank(r) : '')+(mv.label==='Public' && r.ecrPos ? ' · Experts '+r.pos+r.ecrPos : ''), tr!=null && Math.abs(tr)>=1 ? (tr>0?'▲ ':'▼ ')+fmt(Math.abs(tr))+' in 30 days' : null, r.inj || null].filter(Boolean).join(' · '); };
   const teamSel = i => teams ? html`<select class="sel tsel" aria-label=${'Side '+(i?'B':'A')+' team'} value=${sideT[i]!=null ? sideT[i] : (i===0 && teams[me] ? teams[me].rid : '')} onChange=${e=>{ const v = e.target.value; const st = sideT.slice(); st[i] = v==='' ? null : +v; setSideT(st); }}>
@@ -1932,6 +1947,7 @@ function Calc({M, sides, setSides, sideT, setSideT, teams, me, mv, onOpen}){
     </div>`)}</div>
     ${!(sides[0].length+sides[1].length) ? html`<div class="panel empty"><b>Build a trade</b><span>Search a player or a pick on each side, like “Nacua” or “2027 1st”.${teams ? ' Or pick each side\'s team and add straight from its roster.' : ''} Totals and the breakdown appear as you add.</span></div>` : null}
     ${T[0] && T[1] ? html`<div class=${'verdict '+(diff<0.05?'fair':'off')}>${diff<0.05 ? 'Fair: within 5% either way.' : teamsIn[0] && teamsIn[1] ? `${teamsIn[T[0]>T[1]?1:0].name} comes out ahead: it gets ${fmt(100*diff,0)}% more value. To even it, ${teamsIn[T[0]>T[1]?1:0].name} would add about a ${fmt(need)} player to what it sends.` : `Side ${T[0]>T[1]?'A':'B'} is worth ${fmt(100*diff,0)}% more. Add about a ${fmt(need)} player to side ${T[0]>T[1]?'B':'A'} to even it.`}</div>` : null}
+    ${depthWarn.length ? html`<div class="verdict off">${depthWarn.map(w=>html`<div key=${w}>Roster check: ${w}</div>`)}</div>` : null}
     ${finish && finish.list.length ? html`<div class="panel"><h3 style=${{marginTop:0}}>Complete it</h3><p class="note">What ${finish.who ? finish.who.name : 'side '+(finish.lo?'B':'A')} could add to make it even on the board (within 5%), keeping everything already in the trade. Tap one to add it. "Board" is how close it lands on this board; "market" is how a public calculator (what the other manager likely uses) would see the finished trade.</p>
       <div class="fin">${finish.list.map((x,i)=>html`<button class="btn" key=${i} style=${{display:'flex',justifyContent:'space-between',width:'100%',marginTop:6,textAlign:'left'}} onClick=${()=>{ const s2 = sides.map(z=>z.slice()); x.add.forEach(r=>{ if(!s2[finish.lo].includes(r.k)) s2[finish.lo].push(r.k); }); setSides(s2); }}>
         <span>+ ${x.add.map(r=>(r.pos==='PK'?'':r.pos+' ')+r.n).join(' + ')}</span><span class="mono small">board ${Math.abs(x.g)<0.01 ? 'even' : (x.g>0?'+':'')+fmt(100*x.g,0)+'%'} · market ${Math.abs(x.mg)<0.05 ? 'even' : (x.mg>0 ? (finish.who ? finish.who.name : 'side '+(finish.lo?'B':'A')) : (teamsIn[1-finish.lo] ? teamsIn[1-finish.lo].name : 'side '+(finish.lo?'A':'B')))+' gives '+fmt(100*Math.abs(x.mg),0)+'% more'}</span></button>`)}</div></div>` : null}
