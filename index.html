@@ -739,7 +739,8 @@ function rankAll(players, cfgIn, now, adj){
   const c = {...DEF, ...cfgIn}; adj = adj||{};
   let S = 0; players.forEach(p=>Object.keys(p.s||{}).forEach(y=>{ if(p.s[y] && p.s[y][0]>0) S=Math.max(S,+y); }));
   let gS0 = 0; players.forEach(p=>{ const a = p.s && p.s[S]; if(a && a[0]>gS0) gS0 = a[0]; });
-  const fS = 1;   // season weights stay reactive (the backtest prefers it); the level is held steady below instead
+  const fS = Math.min(1, gS0/12);   // the new season takes over gradually: fully 'current' once 12 games are in. One week-1 game (big or bad)
+  // can't flip the board. Backtested Nov 27 2026 at weeks 1/2/4/8/12 of 2021-24: ties the instant switch overall, better at week 1.
   const rows = players.filter(p=>POS.includes(p.pos)).map(p=>{
     const lines = [S, S-1, S-2].map(y=>seasonPts(p.s&&p.s[y], p.pos, c));          // what he scored, your scoring
     const w = weighted([S, S-1, S-2, S-3].map(y=>seasonPts(p.s&&p.s[y], p.pos, c, true)), p.pos, fS);   // what the formula reads
