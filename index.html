@@ -1831,7 +1831,18 @@ function Draft({M, players, cfg, setCfg, D, onOpen, now}){
       if(when==='now'){ if(!!M.redraft===red) return M; return rankAll(players, {...base, __class:(D.classes&&D.classes.years)||{}, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null, __fcRank:fcRankMap(D.fc, idx, base)}, now, (D.adj&&D.adj.rows)||{}); }
       const Sx = M.season, Y = Sx-1, t = Date.UTC(Sx, 8, 1);
       const ps = players.filter(p=>!p.dy || p.dy<=Sx).map(p=>{ const s = {}; Object.keys(p.s||{}).forEach(y=>{ if(+y<=Y) s[y] = p.s[y]; }); return {...p, inj:null, rep:null, ovr:null, moved:null, out:null, rk:false, s30:undefined, comp:null, wk:null, s}; });
-      return rankAll(ps, {...base, __class:(D.classes&&D.classes.years)||{}, __env:null, __comps:D.comps||null}, t, (D.adj&&D.adj.rows)||{});
+      const cx = {__class:(D.classes&&D.classes.years)||{}, __env:null, __comps:D.comps||null}, Bp = rankAll(ps, {...base, ...cx}, t, (D.adj&&D.adj.rows)||{});
+      if(!red) return Bp;
+      // Redraft ranks on NFL games played, so this year's rookies have none to go on before week 1. They come in from the
+      // dynasty engine's first-year scoring estimate (draft capital and comparable players), scaled by how rookies drafted in
+      // the top 100 actually did, 2022-25 (117 players): points per game played 1.07x the estimate (QB), 1.36x (RB),
+      // 1.17x (WR), 1.38x (TE); share of the 17 games they played 0.61 / 0.74 / 0.78 / 0.73 (a QB rookie often sits).
+      const RKP = {QB:1.07, RB:1.36, WR:1.17, TE:1.38}, RKA = {QB:0.61, RB:0.74, WR:0.78, TE:0.73};
+      const Bd = rankAll(ps, {...base, league:'dynasty', ...cx}, t, {});
+      const rk = Bd.rows.filter(r=>r.st && r.st.rookie && r.st.ppg>0).map(r=>{ const ppg = r.st.ppg*RKP[r.pos], av = RKA[r.pos], R = Bp.R[r.pos]||0;
+        const v = Math.max(0, ppg - R)*17*av; return {...r, v: v>0.5 ? v : 0.45*Math.min(1, ppg/(R||1)), st:{...r.st, redraft:true, rookieEst:true, ppg, av, R}}; }).filter(r=>r.v>0.5 || (r.dp && r.dp<=100));   // below waiver level: still listed (top-100 picks), as late-round fliers
+      const rows = [...Bp.rows, ...rk].sort((a,b)=>b.v-a.v), pr = {}; rows.forEach((r,i)=>{ r.rank = i+1; pr[r.pos] = (pr[r.pos]||0)+1; r.prank = pr[r.pos]; });
+      return {...Bp, rows};
     }catch(e){ console.error(e); return null; } }, [M, players, k, when, JSON.stringify(cfg), D.comps, D.fc]);
   // the league's draft (most relevant: one in progress, else the next one, else the last)
   const lid = S0.conn && S0.conn.lid;
@@ -1861,7 +1872,7 @@ function Draft({M, players, cfg, setCfg, D, onOpen, now}){
   const tiers = forYou ? null : (()=>{ const t = {}; const vs = B.rows.filter(r=>!(hide && taken.has(r.k))).map(r=>r.v); tierCut(vs, 240).forEach((x,i)=>{ const r = B.rows.filter(r=>!(hide && taken.has(r.k)))[i]; if(r) t[r.k] = x; }); return t; })();
   const lab = {redraft:'Redraft', startup:'Startup'}[k];
   return html`<div class="panel"><h2>Draft board</h2>
-      <p class="sub">${k==='redraft' ? 'Season-long values: points above a waiver player this season, in your scoring.' : 'Dynasty values for a startup: every player, long-term, in your scoring.'} ${when==='pre' ? 'Pre-season: as it stood before week 1, without this season\'s games or news.' : 'Today: with everything through this week.'}</p>
+      <p class="sub">${k==='redraft' ? 'Season-long values: points above a waiver player this season, in your scoring.' : 'Dynasty values for a startup: every player, long-term, in your scoring.'} ${when==='pre' ? 'Pre-season: as it stood before week 1, without this season\'s games or news.' + (k==='redraft' ? ' Rookies, with no NFL games yet, are estimated from draft capital and how past rookies actually scored.' : '') : 'Today: with everything through this week.'}</p>
       <div class="controls" style=${{marginTop:10,flexWrap:'wrap',gap:8}}>
         <${Seg} label="Draft type" value=${k} onChange=${setK} opts=${[['redraft','Redraft'],['startup','Startup']]}/>
         <${Seg} label="Timing" value=${when} onChange=${setWhen} opts=${[['now','Today'],['pre','Pre-season']]}/>
@@ -1884,7 +1895,7 @@ function Draft({M, players, cfg, setCfg, D, onOpen, now}){
     <div class="panel" style=${{padding:0}}>${rows.map((r,i)=>{ const tb = tiers && (i===0 || tiers[r.k]!==tiers[rows[i-1].k]) && tiers[r.k]<99; const l = r.lines && r.lines[0];
       return html`${tb ? html`<div key=${'t'+r.k} class="eyebrow" style=${{padding:'8px 14px'}}>Tier ${tiers[r.k]}</div>` : null}
       <button key=${r.k} class="row" onClick=${()=>onOpen(r)}><span class="rk">${i+1}</span><span style=${{minWidth:0}}><div class="nm">${r.n}${taken.has(r.k) ? html` <span class="tag">drafted</span>` : null}${forYou && r._f<0.7 ? html` <span class="tag">bench for you</span>` : forYou && have[r.pos]===0 ? html` <span class="tag new">fills ${r.pos}</span>` : null}</div>
-        <div class="meta"><${PosTag} p=${r.pos} n=${r.prank}/><${TeamTag} t=${r.team}/><span>${fmt(r.ageNow,1)}</span>${l ? html`<span>${fmt(l.ppg,1)} ppg</span>` : null}${r.inj ? html`<span class="tag inj">${r.inj}</span>` : null}</div></span>
+        <div class="meta"><${PosTag} p=${r.pos} n=${r.prank}/><${TeamTag} t=${r.team}/><span>${fmt(r.ageNow,1)}</span>${l ? html`<span>${fmt(l.ppg,1)} ppg</span>` : null}${r.st && r.st.rookieEst ? html`<span>${fmt(r.st.ppg,1)} ppg est.</span><span class="tag rook">Rookie</span>` : null}${r.inj ? html`<span class="tag inj">${r.inj}</span>` : null}</div></span>
         <span class="mono" style=${{textAlign:'right'}}>${fmtV(r.v)}</span></button>`; })}</div>`;
 }
 
