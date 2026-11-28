@@ -625,8 +625,11 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle,
   // same idea for a veteran: healthy, on a roster, and no games at all this far into the season means he's buried
   if(w.den>0 && idle && !bench){ st.idle = BENCH*idle; ppg *= 1 - st.idle; }
   st.shrunk = ppg;
-  if(dp && age < 25.5 && c.lam >= 0.02){   // (QBs: the fit gave this ~no weight, so it's skipped)
-    const prior = Math.max(0, (c.dpA - 3.3*Math.log(dp))*sa);
+  // undrafted players get the last pick's pedigree prior (before Nov 28 2026 they skipped it entirely, so a 1-game undrafted
+  // player escaped the pull that a 7th-round pick gets toward what late picks usually become)
+  const dpP = dp || 257;
+  if(age < 25.5 && c.lam >= 0.02){   // (QBs: the fit gave this ~no weight, so it's skipped)
+    const prior = Math.max(0, (c.dpA - 3.3*Math.log(dpP))*sa);
     // pedigree fades with age and with games played: after about two full seasons, production does the talking
     const l = Math.min(0.9, c.lam*dcw) * Math.min(1, (25.5-age)/3) * Math.max(0, 1 - (w.gms||0)/(GF*17));
     ppg = (1-l)*ppg + l*prior; st.prior = prior; st.lam = l; st.lift = l*(prior - st.shrunk);
@@ -638,7 +641,8 @@ function lifetime(Q, w, age, dp, injured, R, upside, dcw, mode, bench, om, idle,
   if(om && om!==1){ st.preOut = ppg; ppg *= om; st.om = om; }   // situation change (new team, role, QB): expected scoring moved up or down
   st.ppg = ppg;
   // youth upside is earned by draft capital: a day-3 rookie doesn't carry a first-rounder's range of outcomes
-  const yf = YF[Q] ? (dp ? Math.max(0.1, 1 - Math.log(dp)/Math.log(257)) : 0.3) : 1;
+  // (undrafted counts as the last pick: before Nov 28 2026 it got 0.3, three times a 7th-rounder's range)
+  const yf = YF[Q] ? Math.max(0.1, 1 - Math.log(dp||257)/Math.log(257)) : 1;
   // an early pick with little NFL tape keeps a wider range of outcomes; it narrows game by game rather than vanishing at the first snap
   const rf = dp && age < 25.5 ? Math.max(0, 1 - (w.gms||0)/ROOKG) : 0, rsd = 1 + (ROOKSD[Q]-1)*tdp*rf; st.rsd = rsd;
   let s=0, sm=0, surv=1; const yrs=[];
@@ -678,10 +682,11 @@ const COMP_VS = {QB:12, RB:5, WR:2.5, TE:1.8};
 function compDist(p,q){ return ((p.age-q.age)/1.0)**2 + ((p.x-q.x)/1.5)**2 + ((p.x1-q.x1)/2.5)**2 + ((p.ldp-q.ldp)/0.8)**2 + ((Math.min(p.car,60)-Math.min(q.car,60))/16)**2
   + (p.vol!=null && q.vol!=null && p.pos ? ((p.vol-q.vol)/COMP_VS[p.pos])**2 : 0)
   + (p.du!=null && q.du!=null ? 2*((p.du-q.du)/0.15)**2 : 0); }   // durability: share of possible games played, last three seasons
+const COMP_MING = 6;
 function compNear(f, pool, K){ K=K||25; const near=[]; for(const e of pool){ const d=compDist(f,e); if(near.length<K){ near.push([d,e]); near.sort((a,b)=>a[0]-b[0]); } else if(d<near[K-1][0]){ near[K-1]=[d,e]; near.sort((a,b)=>a[0]-b[0]); } }
   // weights scale with how far the typical match is (half-weight at the median distance), so one very close match can't
   // outvote the other 24 (Nov 18: backtested the same or slightly better than the old 1/(0.3+d), and far steadier)
-  const md = near.length ? near[Math.floor(near.length/2)][0] : 1; let sw=0, s=0; near.forEach(x=>{ const w=1/(md+x[0]+0.05); x.push(w); sw+=w; s+=w*x[1].t; }); return {p: sw? s/sw : 0, near}; }
+  const md = near.length ? near[Math.floor(near.length/2)][0] : 1; let sw=0, s=0; near.forEach(x=>{ const w=1/(md+x[0]+0.05); x.push(w); sw+=w; s+=w*x[1].t; }); return {p: sw? s/sw : 0, near, md}; }
 // rows: [{pos, v, c}] (c = comps forecast). Within each position, rank players by the model and by their comps, blend the two
 // ranks (log scale, the comps share is W), and hand out the model's own value ladder in the blended order. The ladder (how much
 // #1 is worth, #2, ...) is the model's; comparable players only move who sits on which rung.
@@ -689,7 +694,7 @@ function compBlend(rows, W){ W=W||COMPW; for(const q of ['QB','RB','WR','TE']){ 
   const ladder=P.map(r=>r.v).sort((a,b)=>b-a);
   const rk=key=>{ const o=new Map(); [...P].sort((a,b)=>key(b)-key(a)).forEach((r,i)=>o.set(r,i+1)); return o; };
   const rv=rk(r=>r.v), rc=rk(r=>r.c);
-  P.forEach(r=>{ r.cRank=rc.get(r); r.vRank=rv.get(r); r.bScore=(1-W[q])*Math.log(rv.get(r))+W[q]*Math.log(rc.get(r)); });
+  P.forEach(r=>{ const w = W[q]*(r.cw!=null ? r.cw : 1); r.cRank=rc.get(r); r.vRank=rv.get(r); r.bScore=(1-w)*Math.log(rv.get(r))+w*Math.log(rc.get(r)); });
   [...P].sort((a,b)=>a.bScore-b.bScore || b.v-a.v).forEach((r,i)=>{ r.vBlend=ladder[i]; }); } return rows; }
 function mergeComps(parts){ const names=[], rows=[]; parts.forEach(p=>{ const off=names.length; (p.names||[]).forEach(x=>names.push(x)); (p.rows||[]).forEach(a=>{ const b=a.slice(); b[8]=a[8]+off; rows.push(b); }); }); return {v:2, R:(parts[0]&&parts[0].R)||null, names, rows}; }
 function compLib(lib){ if(!lib || !lib.rows) return null; if(lib._pools) return lib._pools; const P=['QB','RB','WR','TE'], pools={QB:[],RB:[],WR:[],TE:[]};
@@ -818,11 +823,18 @@ function rankAll(players, cfgIn, now, adj){
   // comparable players: move each player toward where his comps rank him (see COMPW), on the formula's own value ladder
   const pools = compLib(c.__comps);
   if(pools){ const fe = compFeats(out, S, gS);
-    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; if(r.p && r.p.pro) return; /* college prospects: no NFL record to match */ /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p*(r.sitF!=null ? r.sitF : 1); r.cNear = res.near.map(([d,e,w])=>({...e, d, w})); r.cRef = {...fe.ref(r), RY:pools.R}; });
-    const rows = out.filter(r=>r.c!=null && (r.base>0 || r.c>0)).map(r=>({r, pos:r.pos, v:r.base, c:r.c}));
+    out.forEach(r=>{ if(r.ageNow==null) return; if(r.ageNow>=35.5) return; if(r.p && r.p.pro) return; /* college prospects: no NFL record to match */ /* the library stops at 35: older players keep the formula's value */ const res = compNear(fe(r), pools[r.pos]); r.c = res.p*(r.sitF!=null ? r.sitF : 1); r.cNear = res.near.map(([d,e,w])=>({...e, d, w})); r.cRef = {...fe.ref(r), RY:pools.R}; r.cMd = res.md; });
+    // Small samples: comparable players are matched on production, and one or two games of production is mostly noise
+    // (one big game and he 'looks like' Keenan Allen). Without real draft capital to anchor the match, a player's comps
+    // count in proportion to his career games, in full from COMP_MING games on. Drafted players (top 100 picks) keep full
+    // weight: the draft slot is part of the match and carries real signal. RB/WR/TE only (the 1QB-vs-superflex check).
+    const MG = c.compMinG!=null ? +c.compMinG : COMP_MING;
+    out.forEach(r=>{ if(r.cMd==null || !MG) return; let g = 0; Object.keys(r.p.s||{}).forEach(y=>{ const a = r.p.s[y]; if(Array.isArray(a)) g += +a[0]||0; });
+      r.cConf = (r.dp && r.dp<=100) || r.pos==='QB' ? 1 : Math.max(0, Math.min(1, g/MG)); });   // QBs keep full comps: a backup QB's value is all upside, and his comps are what hold it in check
+    const rows = out.filter(r=>r.c!=null && (r.base>0 || r.c>0)).map(r=>({r, pos:r.pos, v:r.base, c:r.c, cw:r.cConf}));
     compBlend(rows);
     rows.forEach(x=>{ const r=x.r; if(x.vBlend==null) return; const f = r.base>0 ? x.vBlend/r.base : 1;
-      r.st = {...r.st, comp:{before:r.base, after:x.vBlend, cRank:x.cRank, vRank:x.vRank, near:r.cNear, ref:r.cRef, w:COMPW[r.pos]}};
+      r.st = {...r.st, comp:{before:r.base, after:x.vBlend, cRank:x.cRank, vRank:x.vRank, near:r.cNear, ref:r.cRef, w:COMPW[r.pos]*(r.cConf!=null ? r.cConf : 1), conf:r.cConf}};
       r.base = x.vBlend; r.v = r.base*(1+(r.adj||0)/100); r.st.value *= f; r.st.yrs = (r.st.yrs||[]).map(y=>({...y, yv:y.yv*f})); }); }
   // Lost seasons (Nov 21 2026 backtest, 2012-22): a running back or receiver below starter level (outside the top 24 RBs /
   // 30 WRs) who loses a season to injury tends to lose his spot for good, more than his numbers show. Marking those players

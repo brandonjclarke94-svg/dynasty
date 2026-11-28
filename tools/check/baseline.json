@@ -4,58 +4,58 @@
  "mix_sf": {
   "board": {
    "QB": 32,
-   "RB": 39,
+   "RB": 40,
    "WR": 58,
-   "TE": 21
+   "TE": 20
   },
   "fantasycalc": {
-   "QB": 36,
+   "QB": 38,
    "RB": 41,
-   "WR": 55,
-   "TE": 18
+   "WR": 52,
+   "TE": 19
   }
  },
- "fcAgree_sf": 0.926,
+ "fcAgree_sf": 0.934,
  "mix_oneqb": {
   "board": {
-   "QB": 19,
+   "QB": 20,
    "RB": 44,
-   "WR": 66,
+   "WR": 65,
    "TE": 21
   },
   "fantasycalc": {
    "QB": 22,
-   "RB": 48,
-   "WR": 62,
+   "RB": 49,
+   "WR": 61,
    "TE": 18
   }
  },
- "fcAgree_oneqb": 0.924,
+ "fcAgree_oneqb": 0.931,
  "cases": [
-  "ok   superflex, TE premium: Shedeur Sanders 22 > Phil Mafah 10",
-  "ok   superflex, TE premium: Greg Dulcich 18 > Phil Mafah 10",
-  "ok   superflex: Lamar Jackson 249 > Trey Benson 13",
-  "MISS superflex: Emmett Johnson 44 > Caleb Douglas 46",
-  "MISS 1QB: Emmett Johnson 54 > Caleb Douglas 59"
+  "ok   superflex, TE premium: Shedeur Sanders 18 > Phil Mafah 9",
+  "ok   superflex, TE premium: Greg Dulcich 13 > Phil Mafah 9",
+  "ok   superflex: Lamar Jackson 259 > Trey Benson 13",
+  "ok   superflex: Emmett Johnson 59 > Caleb Douglas 56",
+  "ok   1QB: Emmett Johnson 69 > Caleb Douglas 56"
  ],
  "bt": {
-  "sf": 0.616,
+  "sf": 0.618,
   "sf_vsExperts": [
-   0.65,
+   0.651,
    0.655
   ],
-  "oneqb": 0.606,
+  "oneqb": 0.608,
   "oneqb_vsExperts": [
-   0.632,
-   0.637
+   0.634,
+   0.638
   ],
   "pos_sf": {
-   "QB": 0.636,
-   "RB": 0.592,
-   "WR": 0.687,
-   "TE": 0.453
+   "QB": 0.638,
+   "RB": 0.594,
+   "WR": 0.688,
+   "TE": 0.454
   }
  },
- "at": "2026-11-23T04:00:03.511Z",
+ "at": "2026-11-28T14:38:24.449Z",
  "cfg": {}
 }
