@@ -1811,6 +1811,83 @@ function Finder({teams, me, M, cfg, setCfg, mv, onLoad, nowV}){
             ${x.theirCut>0.5 ? html`<li>Roster: they'd have to drop a player worth about ${fmt(x.theirCut)} (counted against the deal for them).</li>` : null}</ul></div>`; })}`;
 }
 
+// ---------- Draft board: redraft or startup, today or pre-season, in your format; linked to a Sleeper draft ----------
+// Pre-season = the board as it stood before week 1 (this season's games, injuries and news taken out), the way you'd have
+// drafted in August. With a Sleeper league connected: players already picked in its draft drop off, your next pick is shown,
+// and "Best for you" ranks by what each player adds to YOUR starting lineup given who you've drafted (a bench player counts
+// a little over half: depth and upside, not points you'll use).
+function nextPicks(dr, picksMade, slot){ if(!dr || !slot) return []; const n = (dr.settings&&dr.settings.teams)||0, R = (dr.settings&&dr.settings.rounds)||0, snake = dr.type!=='linear', reversal = (dr.settings&&dr.settings.reversal_round)||0; if(!n||!R) return [];
+  const out = []; for(let r=1;r<=R;r++){ let rev = snake && r%2===0; if(snake && reversal && r>=reversal) rev = !rev; const inR = rev ? n+1-slot : slot, no = (r-1)*n + inR; if(no > picksMade) out.push({no, r, inR}); } return out; }
+function Draft({M, players, cfg, setCfg, D, onOpen, now}){
+  const S0 = useSleeper(), [kind, setKind] = useState(()=>lsGet('dvb.draftKind', null)), [when, setWhen] = useState('now'), [pos, setPos] = useState('ALL'), [q, setQ] = useState('');
+  const [sort, setSort] = useState('board'), [hide, setHide] = useState(true), [dr, setDr] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null);
+  const lgType = S0.L && S0.L.league && S0.L.league.settings ? S0.L.league.settings.type : null;   // Sleeper: 0 redraft, 1 keeper, 2 dynasty
+  const k = kind || (lgType===0 ? 'redraft' : lgType!=null ? 'startup' : (cfg.league==='redraft' ? 'redraft' : 'startup'));
+  const setK = v => { setKind(v); lsSet('dvb.draftKind', v); };
+  const idx = useMemo(()=>slIndex(players, D.slmap), [players, D.slmap]);
+  // the board for this draft type and timing, in your format
+  const B = useMemo(()=>{ if(!M || !players.length) return null; const red = k==='redraft', base = {...cfg, league: red ? 'redraft' : 'dynasty'};
+    try{
+      if(when==='now'){ if(!!M.redraft===red) return M; return rankAll(players, {...base, __class:(D.classes&&D.classes.years)||{}, __env:(D.meta&&D.meta.env)||null, __comps:D.comps||null, __fcRank:fcRankMap(D.fc, idx, base)}, now, (D.adj&&D.adj.rows)||{}); }
+      const Sx = M.season, Y = Sx-1, t = Date.UTC(Sx, 8, 1);
+      const ps = players.filter(p=>!p.dy || p.dy<=Sx).map(p=>{ const s = {}; Object.keys(p.s||{}).forEach(y=>{ if(+y<=Y) s[y] = p.s[y]; }); return {...p, inj:null, rep:null, ovr:null, moved:null, out:null, rk:false, s30:undefined, comp:null, wk:null, s}; });
+      return rankAll(ps, {...base, __class:(D.classes&&D.classes.years)||{}, __env:null, __comps:D.comps||null}, t, (D.adj&&D.adj.rows)||{});
+    }catch(e){ console.error(e); return null; } }, [M, players, k, when, JSON.stringify(cfg), D.comps, D.fc]);
+  // the league's draft (most relevant: one in progress, else the next one, else the last)
+  const lid = S0.conn && S0.conn.lid;
+  const loadDraft = async () => { if(!lid) return; setBusy(true); setErr(null);
+    try{ const ds = (await slp('league/'+lid+'/drafts').catch(e=>{ if(e.code==='blocked') throw e; return []; })) || []; const pick = ds.find(d=>d.status==='drafting') || ds.find(d=>d.status==='pre_draft' || d.status==='paused') || ds[0];
+      if(!pick){ setDr({none:true}); return; } const [d, picks] = await Promise.all([slp('draft/'+pick.draft_id), slp('draft/'+pick.draft_id+'/picks').catch(()=>[])]); setDr({...d, picks:picks||[], at:Date.now()}); }
+    catch(e){ setErr(e.code||'http'); } finally{ setBusy(false); } };
+  useEffect(()=>{ setDr(null); if(lid) loadDraft(); }, [lid]);
+  useEffect(()=>{ if(!dr || dr.status!=='drafting') return; const t = setInterval(loadDraft, 20000); return ()=>clearInterval(t); }, [dr && dr.status, lid]);
+  if(!B) return html`<div class="panel empty"><b>Building the draft board</b><span>One moment.</span></div>`;
+  // who's gone, who's yours
+  const uid = S0.conn && S0.conn.uid, picks = (dr && dr.picks) || [], taken = new Set(), mineK = [];
+  picks.forEach(p=>{ const key = idx[p.player_id]; if(key){ taken.add(key); if(p.picked_by===uid) mineK.push(key); } });
+  const slot = dr && dr.draft_order && uid ? dr.draft_order[uid] : null, nxt = nextPicks(dr, picks.length, slot);
+  const byK = Object.fromEntries(B.rows.map(r=>[r.k, r])), myRows = mineK.map(x=>byK[x]).filter(Boolean);
+  // without a draft in progress, your current roster is what you're building on (e.g. a startup mock in an existing league)
+  const rosterRows = (()=>{ if(myRows.length || !S0.L || !S0.L.rosters || !uid) return myRows; const ro = S0.L.rosters.find(x=>x.owner_id===uid || (x.co_owners||[]).includes(uid)); return ro ? (ro.players||[]).map(id=>byK[idx[id]]).filter(Boolean) : []; })();
+  const base0 = lineup(rosterRows, cfg, r=>r.v);
+  const fit = r => { if(r.pos==='PK' || !(r.v>0)) return 1; const gain = lineup([...rosterRows, r], cfg, x=>x.v).tot - base0.tot; return 0.55 + 0.45*Math.min(1, Math.max(0, gain)/r.v); };   // what he adds to your lineup, not just whether he'd start (a 3rd QB who'd bump a good one adds little)
+  const slots = {QB:(cfg.qb||1), RB:cfg.rb||2, WR:cfg.wr||3, TE:cfg.te||1}, have = {QB:0,RB:0,WR:0,TE:0}; [...base0.used].forEach(r=>{ if(have[r.pos]!=null) have[r.pos]++; });
+  const need = POS.filter(p=>have[p] < slots[p] + (p==='QB' && (cfg.sf||cfg.qb>=2) ? 1 : 0));
+  const nq = normName(q), linked = !!(dr && !dr.none);
+  let rows = B.rows.filter(r=>r.v>0.5 || r.rank<=300).filter(r=>!(hide && taken.has(r.k))).filter(r=>pos==='ALL' || r.pos===pos).filter(r=>!nq || normName(r.n).includes(nq));
+  const forYou = sort==='you' && (rosterRows.length || linked);
+  if(forYou) rows = rows.slice(0, 250).map(r=>({r, f:fit(r)})).sort((a,b)=>b.r.v*b.f-a.r.v*a.f).map(x=>({...x.r, _f:x.f}));
+  rows = rows.slice(0, 300);
+  const tiers = forYou ? null : (()=>{ const t = {}; const vs = B.rows.filter(r=>!(hide && taken.has(r.k))).map(r=>r.v); tierCut(vs, 240).forEach((x,i)=>{ const r = B.rows.filter(r=>!(hide && taken.has(r.k)))[i]; if(r) t[r.k] = x; }); return t; })();
+  const lab = {redraft:'Redraft', startup:'Startup'}[k];
+  return html`<div class="panel"><h2>Draft board</h2>
+      <p class="sub">${k==='redraft' ? 'Season-long values: points above a waiver player this season, in your scoring.' : 'Dynasty values for a startup: every player, long-term, in your scoring.'} ${when==='pre' ? 'Pre-season: as it stood before week 1, without this season\'s games or news.' : 'Today: with everything through this week.'}</p>
+      <div class="controls" style=${{marginTop:10,flexWrap:'wrap',gap:8}}>
+        <${Seg} label="Draft type" value=${k} onChange=${setK} opts=${[['redraft','Redraft'],['startup','Startup']]}/>
+        <${Seg} label="Timing" value=${when} onChange=${setWhen} opts=${[['now','Today'],['pre','Pre-season']]}/>
+        ${k==='startup' ? html`<${Seg} label="Team direction" value=${cfg.mode||'neutral'} onChange=${v=>setCfg({...cfg, mode:v})} opts=${[['win','Win now'],['neutral','Neutral'],['rebuild','Rebuild']]}/>` : null}
+      </div>
+      <p class="note" style=${{marginTop:8}}>Format: ${fmtSummary(cfg)}${S0.L ? ' (from your Sleeper league)' : ' · connect a Sleeper league on the Trade tab to link a live draft'}.</p></div>
+    ${lid ? html`<div class="panel"><div style=${{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        <div><span class="eyebrow">Sleeper draft</span><div><b>${S0.L && S0.L.league ? S0.L.league.name : 'Your league'}</b> · ${!dr ? 'checking…' : dr.none ? 'no draft found' : ({drafting:'live', pre_draft:'not started', paused:'paused', complete:'complete'})[dr.status]||dr.status}${linked ? ` · ${picks.length} picks made` : ''}</div></div>
+        <button class="btn" onClick=${loadDraft} disabled=${busy}>${busy?'…':'Refresh'}</button></div>
+      ${linked && nxt.length ? html`<p class="note" style=${{marginTop:6}}>Your next pick: <b>${nxt[0].r}.${String(nxt[0].inR).padStart(2,'0')}</b> (overall ${nxt[0].no}, ${nxt[0].no-picks.length-1===0 ? 'you\'re on the clock' : (nxt[0].no-picks.length-1)+' picks away'})${nxt[1] ? `, then ${nxt[1].r}.${String(nxt[1].inR).padStart(2,'0')}` : ''}.</p>` : linked && !slot ? html`<p class="note">Draft order isn't set yet.</p>` : null}
+      ${rosterRows.length ? html`<p class="note" style=${{marginTop:6}}>${myRows.length ? 'Your picks' : 'Your roster'}: ${rosterRows.length} player${rosterRows.length===1?'':'s'}. ${need.length ? html`Still need starters at <b>${need.join(', ')}</b>.` : 'Starting lineup filled.'}</p>` : null}
+      ${err ? html`<p class="note warnt">${err==='blocked' ? 'This view can\'t reach Sleeper; use the board\'s website.' : 'Couldn\'t load the draft.'}</p>` : null}
+      <div class="controls" style=${{marginTop:8,flexWrap:'wrap',gap:8}}>
+        ${linked ? html`<${Seg} label="Drafted players" value=${hide?'hide':'show'} onChange=${v=>setHide(v==='hide')} opts=${[['hide','Hide drafted'],['show','Show all']]}/>` : null}
+        ${(rosterRows.length || linked) ? html`<${Seg} label="Order" value=${sort} onChange=${setSort} opts=${[['board','Best available'],['you','Best for you']]}/>` : null}
+      </div></div>` : null}
+    <div class="toolbar"><div class="controls"><${Seg} label="Position" value=${pos} onChange=${setPos} opts=${[['ALL','All'],['QB','QB'],['RB','RB'],['WR','WR'],['TE','TE']]}/></div>
+      <input class="search" type="search" placeholder="Search players" value=${q} onInput=${e=>setQ(e.target.value)}/></div>
+    ${forYou ? html`<p class="note">Best for you: value times fit. A player counts in full for the points he adds to your starting lineup; one who'd sit (or only edge out a starter you have) counts as little as 55%, for depth and upside.</p>` : null}
+    <div class="panel" style=${{padding:0}}>${rows.map((r,i)=>{ const tb = tiers && (i===0 || tiers[r.k]!==tiers[rows[i-1].k]) && tiers[r.k]<99; const l = r.lines && r.lines[0];
+      return html`${tb ? html`<div key=${'t'+r.k} class="eyebrow" style=${{padding:'8px 14px'}}>Tier ${tiers[r.k]}</div>` : null}
+      <button key=${r.k} class="row" onClick=${()=>onOpen(r)}><span class="rk">${i+1}</span><span style=${{minWidth:0}}><div class="nm">${r.n}${taken.has(r.k) ? html` <span class="tag">drafted</span>` : null}${forYou && r._f<0.7 ? html` <span class="tag">bench for you</span>` : forYou && have[r.pos]===0 ? html` <span class="tag new">fills ${r.pos}</span>` : null}</div>
+        <div class="meta"><${PosTag} p=${r.pos} n=${r.prank}/><${TeamTag} t=${r.team}/><span>${fmt(r.ageNow,1)}</span>${l ? html`<span>${fmt(l.ppg,1)} ppg</span>` : null}${r.inj ? html`<span class="tag inj">${r.inj}</span>` : null}</div></span>
+        <span class="mono" style=${{textAlign:'right'}}>${fmtV(r.v)}</span></button>`; })}</div>`;
+}
+
 function Trade({M, cfg, setCfg, players, slmap, fc, H, needH, hasFd, onOpen, onStar}){
   const S = useSleeper();
   const idx = useMemo(()=>slIndex(players, slmap), [players, slmap]);
@@ -2210,7 +2287,7 @@ function Chart({M, mine, onOpen}){
     <div class="cnarrow">${bands.map(x=>html`<section key=${x.b.lo} class="band"><div class="bh"><span>${rng(x.b)}</span><i></i></div><div class="bgrid">${x.all.map(card)}</div></section>`)}</div>
   </div>`;
 }
-const VIEWS = ['home','board','chart','trade','format','method'];
+const VIEWS = ['home','board','chart','trade','draft','format','method'];
 const ico = d => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 // Sparkline (pattern from 21st.dev Spark Table): points per game over the last three seasons, oldest first, tinted by direction.
 function Spark({vals}){
@@ -2238,6 +2315,7 @@ const TABS = [
   ['board','Rankings', ico(html`<path d="M4 6h16M4 12h16M4 18h10"/>`)],
   ['chart','Chart', ico(html`<path d="M4 20V4M4 20h16"/><path d="M8 16h3M8 12h6M8 8h9"/>`)],
   ['trade','Trade', ico(html`<path d="M7 7h12l-3-3M17 17H5l3 3"/>`)],
+  ['draft','Draft', ico(html`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/>`)],
   ['format','Format', ico(html`<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>`)],
   ['method','Method', ico(html`<path d="M5 4h14v16H5z"/><path d="M9 8h6M9 12h6M9 16h4"/>`)] ];
 function App(){
@@ -2371,17 +2449,18 @@ function App(){
       <nav class="dtabs" aria-label="Sections">${TABS.map(([v,l])=>html`<button key=${v} aria-current=${view===v?'page':null} onClick=${()=>go(v)}>${l}</button>`)}</nav>
       ${st}<${ThemeBtn}/></div></header>
     <main class="wrap">
-      ${loaded && (view==='format'||view==='method') ? html`<div class="moreseg"><${Seg} label="More" value=${view} onChange=${go} opts=${[['format','Format'],['method','Method']]}/></div>` : null}
+      ${loaded && (view==='format'||view==='method'||view==='chart') ? html`<div class="moreseg"><${Seg} label="More" value=${view} onChange=${go} opts=${[['chart','Chart'],['format','Format'],['method','Method']]}/></div>` : null}
       ${!loaded ? html`<div class="panel empty"><b>Loading the board</b><span>Fetching the latest values.</span></div>`
         : view==='home' ? html`<${Dashboard} M=${M} D=${D} cfg=${cfg} mine=${mine} onOpen=${r=>setOpen(r.k)} go=${go}/>`
         : view==='board' ? html`<${Board} M=${M} status=${status} onOpen=${r=>setOpen(r.k)} cfg=${cfg} setCfg=${setCfg} classes=${D.classes} canEdit=${canEdit} onClass=${saveClass} mine=${mine} pro=${D.prospects ? (pro && pro.key===proKey ? pro : {busy:true, year:D.prospects.year}) : null} needPro=${()=>setWantPro(true)}/>`
         : view==='chart' ? html`<${Chart} M=${M} mine=${mine} onOpen=${r=>setOpen(r.k)}/>`
         : view==='trade' ? html`<${Trade} M=${M} cfg=${cfg} setCfg=${setCfg} players=${players} slmap=${D.slmap||null} fc=${D.fc||null} H=${hist && hist.key===histKey ? hist.H : null} needH=${()=>setWantHist(true)} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))} onOpen=${r=>setOpen(r.k)} onStar=${keys=>{ const s = new Set(keys); setMine(s); lsSet('dvb.mine', [...s]); }}/>`
+        : view==='draft' ? html`<${Draft} M=${M} players=${players} cfg=${cfg} setCfg=${setCfg} D=${D} now=${now} onOpen=${r=>setOpen(r.k)}/>`
         : view==='format' ? html`<${FormatView} cfg=${cfg} setCfg=${setCfg} def=${def} canEdit=${canEdit} onSaveDef=${saveDef} hasFd=${!!(D.meta&&D.meta.fd&&(D.meta.fd.rec||D.meta.fd.rush))}/>`
         : html`<${Method} M=${M} meta=${D.meta} players=${players} cfg=${cfg} D=${D} onOpen=${r=>setOpen(r.k)}/>`}
     </main>
-    <nav class="tabs" aria-label="Sections"><div class="wrap">${[...TABS.slice(0,4), ['more','More', ico(html`<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>`)]].map(([v,l,ic])=>{ const cur = v==='more' ? (view==='format'||view==='method') : view===v;
-      return html`<button key=${v} aria-current=${cur?'page':null} onClick=${()=>go(v==='more' ? (view==='method'?'method':'format') : v)}>${ic}<span>${l}</span></button>`; })}</div></nav>
+    <nav class="tabs" aria-label="Sections"><div class="wrap">${[TABS[0], TABS[1], TABS[3], TABS[4], ['more','More', ico(html`<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>`)]].map(([v,l,ic])=>{ const cur = v==='more' ? (view==='format'||view==='method'||view==='chart') : view===v;
+      return html`<button key=${v} aria-current=${cur?'page':null} onClick=${()=>go(v==='more' ? (view==='method'||view==='chart' ? view : 'format') : v)}>${ic}<span>${l}</span></button>`; })}</div></nav>
     ${openRow ? html`<${Sheet} r=${openRow} M=${M} canEdit=${canEdit} onAdj=${saveAdj} onInj=${saveInj} onOut=${saveOut} starred=${mine.has(openRow.k)} onStar=${toggleMine} H=${hist && hist.key===histKey ? hist.H : null} onClose=${()=>setOpen(null)}/>` : null}`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
